@@ -1,2 +1,9 @@
 # Arena-of-Honor-Rise-to-Freedom
-Luscha. Sobrevive. Consigue tu libertad
+Lucha. Sobrevive. Consigue tu libertad
+
+Este es mi primer proyecto usando Unity.
+
+## Características
+- Movimiento del jugador
+- Enemigos básicos
+- Ambientación en Coliseo Romano
