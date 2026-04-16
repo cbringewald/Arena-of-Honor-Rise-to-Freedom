@@ -44,12 +44,17 @@ public class PlayerCombat : MonoBehaviour
             animator.SetBool(walkHash, false);
             animator.SetBool(runHash, false);
             animator.ResetTrigger(attackHash);
-            animator.SetTrigger(attackHash);
+            animator.SetTrigger(attackHash);  
         }
     }
 
     public void EndAttack()
     {
         isAttacking = false;
+    }
+
+    public bool IsAttacking()
+    {
+        return isAttacking;
     }
 }
