@@ -7,21 +7,33 @@ public class WeaponHitbox : MonoBehaviour
     [SerializeField] private Transform ownerRoot;
 
     private readonly HashSet<Health> damagedTargets = new HashSet<Health>();
+    private bool swingActive;
 
     public void StartSwing()
     {
+        if (swingActive) return;
+
+        swingActive = true;
         damagedTargets.Clear();
         Debug.Log("Nuevo swing - lista reseteada");
     }
 
+    public void EndSwing()
+    {
+        swingActive = false;
+        damagedTargets.Clear();
+        Debug.Log("Swing terminado");
+    }
+
     private void OnTriggerEnter(Collider other)
     {
-        Debug.Log("OnTriggerEnter con: " + other.name);
+        if (!swingActive) return;
         TryDamage(other);
     }
 
     private void OnTriggerStay(Collider other)
     {
+        if (!swingActive) return;
         TryDamage(other);
     }
 
@@ -35,6 +47,24 @@ public class WeaponHitbox : MonoBehaviour
         if (ownerRoot != null && other.transform.root == ownerRoot)
             return;
 
+        DamageZone zone = other.GetComponent<DamageZone>();
+
+        if (zone != null && zone.Health != null)
+        {
+            Health targetHealth = zone.Health;
+
+            if (damagedTargets.Contains(targetHealth))
+                return;
+
+            int finalDamage = zone.GetFinalDamage(damage);
+
+            Debug.Log($"Daño aplicado a: {targetHealth.gameObject.name} | Zona: {zone.ZoneName} | Daño final: {finalDamage}");
+
+            targetHealth.TakeDamage(finalDamage, zone.ZoneName);
+            damagedTargets.Add(targetHealth);
+            return;
+        }
+
         Health health = other.GetComponentInParent<Health>();
 
         if (health == null)
@@ -46,8 +76,8 @@ public class WeaponHitbox : MonoBehaviour
         if (damagedTargets.Contains(health))
             return;
 
-        Debug.Log("Daño aplicado a: " + health.gameObject.name);
-        health.TakeDamage(damage);
+        Debug.Log($"Daño aplicado a: {health.gameObject.name} | Zona: Default | Daño: {damage}");
+        health.TakeDamage(damage, "Default");
         damagedTargets.Add(health);
     }
 }

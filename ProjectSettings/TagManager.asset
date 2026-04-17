@@ -9,6 +9,7 @@ TagManager:
   - WeaponPlayer
   - WeaponEnemy
   - Shieldnemy
+  - DeathCamera
   layers:
   - Default
   - TransparentFX
@@ -17,12 +18,12 @@ TagManager:
   - Water
   - UI
   - Enemy
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Player
+  - PlayerWeapon
+  - EnemyWeapon
+  - Hitbox
+  - Enviroment
+  - Ragdoll
   - 
   - 
   - 

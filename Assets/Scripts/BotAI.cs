@@ -18,13 +18,19 @@ public class BotAI : MonoBehaviour
     [Header("Velocidades")]
     [SerializeField] private float runSpeed = 3.8f;
 
+    [Header("Hit Reaction")]
+    [SerializeField] private float hitReactionDuration = 0.45f;
+    [SerializeField] private bool cancelAttackOnHit = true;
+
     [Header("Referencias")]
     [SerializeField] private Animator animator;
+    [SerializeField] private Health health;
 
     [Header("Animator Parameters")]
     [SerializeField] private string walkParameter = "Walk";
     [SerializeField] private string runParameter = "Run";
     [SerializeField] private string attackParameter = "Attack";
+    [SerializeField] private string hitParameter = "Hit";
 
     [Header("NavMesh Fix")]
     [SerializeField] private float snapToNavMeshDistance = 2f;
@@ -33,10 +39,13 @@ public class BotAI : MonoBehaviour
     private float nextAttackTime;
     private bool isChasing;
     private bool isAttacking;
+    private bool isHitReacting;
+    private float hitReactEndTime;
 
     private int walkHash;
     private int runHash;
     private int attackHash;
+    private int hitHash;
 
     private void Awake()
     {
@@ -48,12 +57,28 @@ public class BotAI : MonoBehaviour
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
 
+        if (health == null)
+            health = GetComponent<Health>();
+
         if (animator == null)
             Debug.LogError("BotAI: No se encontró Animator.");
 
         walkHash = Animator.StringToHash(walkParameter);
         runHash = Animator.StringToHash(runParameter);
         attackHash = Animator.StringToHash(attackParameter);
+        hitHash = Animator.StringToHash(hitParameter);
+    }
+
+    private void OnEnable()
+    {
+        if (health != null)
+            health.OnDamaged += HandleDamaged;
+    }
+
+    private void OnDisable()
+    {
+        if (health != null)
+            health.OnDamaged -= HandleDamaged;
     }
 
     private void Start()
@@ -63,6 +88,13 @@ public class BotAI : MonoBehaviour
 
     private void Update()
     {
+        if (health != null && health.IsDead)
+        {
+            StopAgent();
+            SetMovementAnimation(false, false);
+            return;
+        }
+
         if (player == null || agent == null || animator == null)
         {
             SetMovementAnimation(false, false);
@@ -72,6 +104,17 @@ public class BotAI : MonoBehaviour
         if (!agent.enabled || !agent.isOnNavMesh)
         {
             SetMovementAnimation(false, false);
+            return;
+        }
+
+        if (isHitReacting)
+        {
+            StopAgent();
+            SetMovementAnimation(false, false);
+
+            if (Time.time >= hitReactEndTime)
+                isHitReacting = false;
+
             return;
         }
 
@@ -111,17 +154,19 @@ public class BotAI : MonoBehaviour
 
     private void HandleIdle()
     {
-        if (agent.hasPath)
-            agent.ResetPath();
-
+        StopAgent();
         SetMovementAnimation(false, false);
     }
 
     private void HandleChase()
     {
-        if (isAttacking)
+        if (isAttacking || isHitReacting)
             return;
 
+        if (!agent.enabled || !agent.isOnNavMesh)
+            return;
+
+        agent.isStopped = false;
         agent.speed = runSpeed;
         agent.stoppingDistance = attackRange - 0.1f;
         agent.SetDestination(player.position);
@@ -132,7 +177,10 @@ public class BotAI : MonoBehaviour
 
     private void HandleAttack()
     {
-        agent.ResetPath();
+        if (isHitReacting)
+            return;
+
+        StopAgent();
         SetMovementAnimation(false, false);
 
         Vector3 dir = player.position - transform.position;
@@ -153,15 +201,61 @@ public class BotAI : MonoBehaviour
         }
     }
 
+    private void StopAgent()
+    {
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.isStopped = true;
+            agent.ResetPath();
+        }
+    }
+
     private void SetMovementAnimation(bool walk, bool run)
     {
+        if (animator == null) return;
+
         animator.SetBool(walkHash, walk);
         animator.SetBool(runHash, run);
     }
 
+    private void HandleDamaged(int damage, string hitZone)
+    {
+        if (health != null && health.IsDead)
+            return;
+
+        isHitReacting = true;
+        hitReactEndTime = Time.time + hitReactionDuration;
+
+        if (cancelAttackOnHit)
+            isAttacking = false;
+
+        StopAgent();
+        SetMovementAnimation(false, false);
+
+        if (animator != null)
+        {
+            animator.ResetTrigger(attackHash);
+            animator.ResetTrigger(hitHash);
+            animator.SetTrigger(hitHash);
+        }
+    }
+
+    // Animation Event: al final del ataque
     public void EndAttack()
     {
         isAttacking = false;
+    }
+
+    // Animation Event opcional al final de la animación de hit
+    public void EndHitReaction()
+    {
+        isHitReacting = false;
+    }
+
+    // Animation Event: si en tu clip tienes un evento llamado "IsAttacking"
+    public void IsAttacking()
+    {
+        isAttacking = true;
     }
 
     public void SetPlayer(Transform newPlayer)

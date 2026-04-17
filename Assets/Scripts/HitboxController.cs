@@ -5,8 +5,14 @@ public class HitboxController : MonoBehaviour
     [SerializeField] private Collider hitboxCollider;
     [SerializeField] private WeaponHitbox weaponHitbox;
 
-    private void Start()
+    private void Awake()
     {
+        if (hitboxCollider == null)
+            hitboxCollider = GetComponent<Collider>();
+
+        if (weaponHitbox == null)
+            weaponHitbox = GetComponent<WeaponHitbox>();
+
         if (hitboxCollider != null)
             hitboxCollider.enabled = false;
     }
@@ -16,13 +22,12 @@ public class HitboxController : MonoBehaviour
         if (weaponHitbox != null)
             weaponHitbox.StartSwing();
 
-        if (hitboxCollider != null)
-        {
-            hitboxCollider.enabled = false;
-            hitboxCollider.enabled = true;
-        }
+        if (hitboxCollider == null)
+            return;
 
-        Debug.Log("Hitbox ENABLE");
+        hitboxCollider.enabled = false;
+        Physics.SyncTransforms();
+        hitboxCollider.enabled = true;
     }
 
     public void DisableHitbox()
@@ -30,6 +35,7 @@ public class HitboxController : MonoBehaviour
         if (hitboxCollider != null)
             hitboxCollider.enabled = false;
 
-        Debug.Log("Hitbox DISABLE");
+        if (weaponHitbox != null)
+            weaponHitbox.EndSwing();
     }
 }

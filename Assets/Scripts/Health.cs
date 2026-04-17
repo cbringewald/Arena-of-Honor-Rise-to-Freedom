@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class Health : MonoBehaviour
 {
+    [Header("Health")]
     [SerializeField] private int maxHealth = 3;
     [SerializeField] private Renderer rend;
     [SerializeField] private Color hitColor = Color.red;
@@ -12,22 +14,26 @@ public class Health : MonoBehaviour
     [Header("Death")]
     [SerializeField] private Animator animator;
     [SerializeField] private string deathTriggerName = "Die";
+    [SerializeField] private string hitTriggerName = "Hit";
+    [SerializeField] private string attackTriggerName = "Attack";
+    [SerializeField] private bool useDeathCamera = false;
 
     private int currentHealth;
     private Color originalColor;
     private bool isDead;
     private DeathCinemachineController deathCam;
+    private Coroutine hitFlashCoroutine;
 
     public int CurrentHealth => currentHealth;
     public int MaxHealth => maxHealth;
     public float NormalizedHealth => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
     public bool IsDead => isDead;
 
-    public event Action<int, int> OnHealthChanged;
-    public event Action OnDied;
-    [SerializeField] private Collider shieldCollider;
+    public bool IsInvincible { get; set; }
 
-    
+    public event Action<int, int> OnHealthChanged;
+    public event Action<int, string> OnDamaged;
+    public event Action OnDied;
 
     private void Awake()
     {
@@ -51,27 +57,45 @@ public class Health : MonoBehaviour
 
     public void TakeDamage(int damage)
     {
+        TakeDamage(damage, "Unknown");
+    }
+
+    public void TakeDamage(int damage, string hitZone)
+    {
         if (currentHealth <= 0 || isDead) return;
+        if (IsInvincible) return;
+        if (damage <= 0) return;
 
         currentHealth -= damage;
         currentHealth = Mathf.Max(currentHealth, 0);
 
-        Debug.Log($"{gameObject.name} vida: {currentHealth}");
-
-        if (rend != null)
-            StartCoroutine(HitFlash());
+        Debug.Log($"{gameObject.name} recibió {damage} de daño en {hitZone}. Vida: {currentHealth}");
 
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
+        // Si el golpe mata, NO disparamos OnDamaged para evitar que la IA lance Hit
+        // y compita con la animación de muerte.
         if (currentHealth <= 0)
         {
             Die();
+            return;
         }
+
+        if (rend != null)
+        {
+            if (hitFlashCoroutine != null)
+                StopCoroutine(hitFlashCoroutine);
+
+            hitFlashCoroutine = StartCoroutine(HitFlash());
+        }
+
+        OnDamaged?.Invoke(damage, hitZone);
     }
 
     public void Heal(int amount)
     {
         if (currentHealth <= 0 || isDead) return;
+        if (amount <= 0) return;
 
         currentHealth += amount;
         currentHealth = Mathf.Min(currentHealth, maxHealth);
@@ -83,7 +107,11 @@ public class Health : MonoBehaviour
     {
         rend.material.color = hitColor;
         yield return new WaitForSeconds(flashTime);
-        rend.material.color = originalColor;
+
+        if (rend != null)
+            rend.material.color = originalColor;
+
+        hitFlashCoroutine = null;
     }
 
     private void Die()
@@ -91,42 +119,56 @@ public class Health : MonoBehaviour
         if (isDead) return;
         isDead = true;
 
+        Debug.Log(gameObject.name + " -> Die() llamada");
+
+        // Parar cualquier flash activo para no pisar materiales al morir
+        if (hitFlashCoroutine != null)
+        {
+            StopCoroutine(hitFlashCoroutine);
+            hitFlashCoroutine = null;
+        }
+
+        if (rend != null)
+            rend.material.color = originalColor;
+
+        // Desactivar IA antes de lanzar la muerte
+        BotAI botAI = GetComponent<BotAI>();
+        if (botAI != null)
+            botAI.enabled = false;
+
+        NavMeshAgent agent = GetComponent<NavMeshAgent>();
+        if (agent != null)
+        {
+            if (agent.isOnNavMesh)
+                agent.isStopped = true;
+
+            agent.enabled = false;
+        }
+
         OnDied?.Invoke();
 
         if (animator != null)
         {
+            Debug.Log("Trigger de muerte enviado al Animator: " + animator.name);
+
+            // Limpiamos posibles triggers que estén compitiendo
+            if (!string.IsNullOrEmpty(hitTriggerName))
+                animator.ResetTrigger(hitTriggerName);
+
+            if (!string.IsNullOrEmpty(attackTriggerName))
+                animator.ResetTrigger(attackTriggerName);
+
             animator.ResetTrigger(deathTriggerName);
             animator.SetTrigger(deathTriggerName);
         }
+        else
+        {
+            Debug.LogWarning($"{gameObject.name}: no hay Animator asignado en Health.");
+        }
 
-        if (deathCam != null)
+        if (useDeathCamera && deathCam != null)
         {
             deathCam.FocusOnDeadEnemy(transform);
         }
-
-        // Desactivar IA
-        BotAI ai = GetComponent<BotAI>();
-        if (ai != null)
-            ai.enabled = false;
-
-        // Desactivar navegación
-        UnityEngine.AI.NavMeshAgent agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
-        if (agent != null)
-            agent.enabled = false;
-
-        // Desactivar CharacterController si lo usa
-        CharacterController cc = GetComponent<CharacterController>();
-        if (cc != null)
-            cc.enabled = false;
-
-        // Mantener el cadáver físico para poder moverlo
-        Rigidbody rb = GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            rb.isKinematic = false;
-        }
-
-        if (shieldCollider != null)
-            shieldCollider.enabled = false;
-        }
+    }
 }

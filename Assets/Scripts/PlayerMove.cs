@@ -7,16 +7,22 @@ public class PlayerMove : MonoBehaviour
     [Header("Movimiento")]
     [SerializeField] private float walkSpeed = 2.5f;
     [SerializeField] private float runSpeed = 5.5f;
+    [SerializeField] private float blockMoveSpeed = 1.5f;
     [SerializeField] private float rotationSpeed = 10f;
 
     [Header("Gravedad")]
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float groundedForce = -2f;
 
+    [Header("Restricciones")]
+    [SerializeField] private bool blockMovementWhileAttacking = true;
+
     [Header("Referencias")]
     [SerializeField] private Transform cameraTransform;
     [SerializeField] private Animator animator;
     [SerializeField] private PlayerCombat playerCombat;
+    [SerializeField] private PlayerBlock playerBlock;
+    [SerializeField] private PlayerDodge playerDodge;
 
     [Header("Animator Parameters")]
     [SerializeField] private string walkParameter = "Walk";
@@ -41,6 +47,12 @@ public class PlayerMove : MonoBehaviour
         if (playerCombat == null)
             playerCombat = GetComponent<PlayerCombat>();
 
+        if (playerBlock == null)
+            playerBlock = GetComponent<PlayerBlock>();
+
+        if (playerDodge == null)
+            playerDodge = GetComponent<PlayerDodge>();
+
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
@@ -59,6 +71,18 @@ public class PlayerMove : MonoBehaviour
         if (cameraTransform == null || animator == null)
             return;
 
+        if (playerDodge != null && playerDodge.IsDodging)
+        {
+            SetMovementAnimator(false, false);
+            return;
+        }
+
+        if (blockMovementWhileAttacking && playerCombat != null && playerCombat.IsAttacking)
+        {
+            SetMovementAnimator(false, false);
+            return;
+        }
+
         Vector2 moveInput = Vector2.zero;
 
         if (Keyboard.current != null)
@@ -72,7 +96,8 @@ public class PlayerMove : MonoBehaviour
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
 
         bool hasInput = moveInput.sqrMagnitude > 0.01f;
-        bool isRunning = hasInput && Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
+        bool wantsRun = hasInput && Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
+        bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
 
         Vector3 inputDirection = new Vector3(moveInput.x, 0f, moveInput.y);
 
@@ -89,15 +114,30 @@ public class PlayerMove : MonoBehaviour
 
             Vector3 moveDirection = (cameraForward * inputDirection.z + cameraRight * inputDirection.x).normalized;
 
-            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            if (moveDirection.sqrMagnitude > 0.001f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            }
 
-            float speed = isRunning ? runSpeed : walkSpeed;
+            float speed;
+
+            if (isBlocking)
+            {
+                speed = blockMoveSpeed;
+            }
+            else
+            {
+                speed = wantsRun ? runSpeed : walkSpeed;
+            }
+
             controller.Move(moveDirection * speed * Time.deltaTime);
         }
 
-        animator.SetBool(walkHash, hasInput && !isRunning);
-        animator.SetBool(runHash, isRunning);
+        bool isRunning = hasInput && wantsRun && !isBlocking;
+        bool isWalking = hasInput && !isRunning;
+
+        SetMovementAnimator(isWalking, isRunning);
     }
 
     private void ApplyGravity()
@@ -107,5 +147,11 @@ public class PlayerMove : MonoBehaviour
 
         verticalVelocity.y += gravity * Time.deltaTime;
         controller.Move(verticalVelocity * Time.deltaTime);
+    }
+
+    private void SetMovementAnimator(bool walk, bool run)
+    {
+        animator.SetBool(walkHash, walk);
+        animator.SetBool(runHash, run);
     }
 }
