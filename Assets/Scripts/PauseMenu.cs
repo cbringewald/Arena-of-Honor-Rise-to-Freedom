@@ -1,11 +1,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class PauseMenu : MonoBehaviour
 {
     [Header("UI Containers")]
-    [SerializeField] private GameObject pauseMenuUI;   // Arrastra PauseContent
-    [SerializeField] private GameObject optionsMenuUI; // Arrastra OptionsMenu
+    [SerializeField] private GameObject pauseMenuUI;
+    [SerializeField] private GameObject optionsMenuUI;
+
+    [Header("Scenes")]
+    [SerializeField] private string mainMenuSceneName = "MainMenu";
 
     private bool isPaused = false;
 
@@ -22,7 +26,6 @@ public class PauseMenu : MonoBehaviour
 
     void Update()
     {
-        // New Input System
         if (Keyboard.current == null) return;
 
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
@@ -33,14 +36,12 @@ public class PauseMenu : MonoBehaviour
                 return;
             }
 
-            // Si estás en opciones, ESC vuelve al pause
             if (optionsMenuUI != null && optionsMenuUI.activeSelf)
             {
                 CloseOptions();
                 return;
             }
 
-            // Si estás en pause, ESC reanuda
             ResumeGame();
         }
     }
@@ -87,23 +88,31 @@ public class PauseMenu : MonoBehaviour
         pauseMenuUI.SetActive(true);
     }
 
+    public void BackToMainMenu()
+    {
+        Time.timeScale = 1f;
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        SceneManager.LoadScene(mainMenuSceneName);
+    }
+
     public void QuitGame()
     {
+        Time.timeScale = 1f;
         Application.Quit();
     }
 
-    // Conecta Toggle -> OnValueChanged(bool)
     public void SetFullscreen(bool value)
     {
         Debug.Log("Fullscreen: " + value);
-        // Más adelante: Screen.fullScreen = value;
+        Screen.fullScreen = value;
     }
 
-    // Conecta Slider -> OnValueChanged(float)
     public void SetMusicVolume(float value)
     {
         Debug.Log("Music volume: " + value);
-        // Más adelante: AudioMixer.SetFloat(...)
     }
 }
 

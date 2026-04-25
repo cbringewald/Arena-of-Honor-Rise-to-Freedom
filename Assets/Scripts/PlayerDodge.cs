@@ -14,6 +14,7 @@ public class PlayerDodge : MonoBehaviour
     [SerializeField] private float dodgeCost = 25f;
     [SerializeField] private float dodgeDistance = 3f;
     [SerializeField] private float dodgeDuration = 0.2f;
+    [SerializeField] private Key dodgeKey = Key.Q;
 
     [Header("I-Frames")]
     [SerializeField] private bool useInvincibilityFrames = true;
@@ -56,7 +57,7 @@ public class PlayerDodge : MonoBehaviour
         if (Keyboard.current == null)
             return;
 
-        if (Keyboard.current.spaceKey.wasPressedThisFrame)
+        if (Keyboard.current[dodgeKey].wasPressedThisFrame)
         {
             TryDodge();
         }
@@ -67,6 +68,7 @@ public class PlayerDodge : MonoBehaviour
         if (IsDodging) return;
         if (playerCombat != null && playerCombat.IsAttacking) return;
         if (playerBlock != null && playerBlock.IsBlocking) return;
+        if (characterController != null && !characterController.isGrounded) return;
 
         if (stamina != null && !stamina.UseStamina(dodgeCost))
         {
@@ -98,7 +100,7 @@ public class PlayerDodge : MonoBehaviour
         {
             elapsed += Time.deltaTime;
 
-            if (characterController != null)
+            if (characterController != null && characterController.enabled)
                 characterController.Move(direction * speed * Time.deltaTime);
             else
                 transform.position += direction * speed * Time.deltaTime;

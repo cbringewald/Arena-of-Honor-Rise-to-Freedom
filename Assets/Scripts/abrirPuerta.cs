@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class PortonArena : MonoBehaviour
 {
@@ -19,11 +18,6 @@ public class PortonArena : MonoBehaviour
 
     void Update()
     {
-        if (Keyboard.current.eKey.wasPressedThisFrame)
-        {
-            abierto = !abierto; // cambia entre abrir y cerrar
-        }
-
         Vector3 objetivo = abierto ? posicionAbierto : posicionCerrado;
 
         transform.position = Vector3.MoveTowards(
@@ -31,5 +25,15 @@ public class PortonArena : MonoBehaviour
             objetivo,
             velocidad * Time.deltaTime
         );
+    }
+
+    public void OpenDoor()
+    {
+        abierto = true;
+    }
+
+    public void CloseDoor()
+    {
+        abierto = false;
     }
 }

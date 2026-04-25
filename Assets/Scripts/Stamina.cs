@@ -22,6 +22,11 @@ public class Stamina : MonoBehaviour
         currentStamina = maxStamina;
     }
 
+    private void Start()
+    {
+        OnStaminaChanged?.Invoke(currentStamina, maxStamina);
+    }
+
     private void Update()
     {
         if (Time.time >= lastUseTime + regenDelay)
@@ -50,8 +55,11 @@ public class Stamina : MonoBehaviour
 
     public void Restore(float amount)
     {
+        if (amount <= 0f) return;
+
         currentStamina += amount;
         currentStamina = Mathf.Min(currentStamina, maxStamina);
+
         OnStaminaChanged?.Invoke(currentStamina, maxStamina);
     }
 

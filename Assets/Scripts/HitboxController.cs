@@ -17,17 +17,23 @@ public class HitboxController : MonoBehaviour
             hitboxCollider.enabled = false;
     }
 
-    public void EnableHitbox()
+    public void SetOwnerRoot(Transform ownerRoot)
     {
         if (weaponHitbox != null)
+            weaponHitbox.SetOwnerRoot(ownerRoot);
+    }
+
+    public void EnableHitbox()
+    {
+        if (hitboxCollider != null)
+        {
+            hitboxCollider.enabled = false;
+            Physics.SyncTransforms();
+            hitboxCollider.enabled = true;
+        }
+
+        if (weaponHitbox != null)
             weaponHitbox.StartSwing();
-
-        if (hitboxCollider == null)
-            return;
-
-        hitboxCollider.enabled = false;
-        Physics.SyncTransforms();
-        hitboxCollider.enabled = true;
     }
 
     public void DisableHitbox()

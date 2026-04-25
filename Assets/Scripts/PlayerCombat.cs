@@ -10,29 +10,32 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private HitboxController hitboxController;
     [SerializeField] private PlayerBlock playerBlock;
     [SerializeField] private PlayerDodge playerDodge;
+    [SerializeField] private Health health;
 
     [Header("Attack Settings")]
     [SerializeField] private float weaponAttackCost = 20f;
     [SerializeField] private float unarmedAttackCost = 10f;
-    [SerializeField] private bool isUnarmed = false;
+    [SerializeField] private WeaponStyle currentWeaponStyle = WeaponStyle.Unarmed;
+
+    [Header("Weapon Visuals")]
+    [SerializeField] private GameObject currentWeaponObject;
 
     [Header("Animator Parameters")]
     [SerializeField] private string walkParameter = "Walk";
     [SerializeField] private string runParameter = "Run";
     [SerializeField] private string attackParameter = "Attack";
-    [SerializeField] private string punchParameter = "Punch";
-    [SerializeField] private string isUnarmedParameter = "IsUnarmed";
+    [SerializeField] private string weaponStyleParameter = "WeaponStyle";
 
     private int walkHash;
     private int runHash;
     private int attackHash;
-    private int punchHash;
-    private int isUnarmedHash;
+    private int weaponStyleHash;
 
     private bool isAttacking;
 
     public bool IsAttacking => isAttacking;
-    public bool IsUnarmed => isUnarmed;
+    public WeaponStyle CurrentWeaponStyle => currentWeaponStyle;
+    public bool IsUnarmed => currentWeaponStyle == WeaponStyle.Unarmed;
 
     private void Awake()
     {
@@ -51,24 +54,39 @@ public class PlayerCombat : MonoBehaviour
         if (playerDodge == null)
             playerDodge = GetComponent<PlayerDodge>();
 
+        if (health == null)
+            health = GetComponent<Health>();
+
         if (hitboxController == null)
             hitboxController = GetComponentInChildren<HitboxController>();
-
-        if (animator == null)
-            Debug.LogError("PlayerCombat: No se encontró Animator.");
 
         walkHash = Animator.StringToHash(walkParameter);
         runHash = Animator.StringToHash(runParameter);
         attackHash = Animator.StringToHash(attackParameter);
-        punchHash = Animator.StringToHash(punchParameter);
-        isUnarmedHash = Animator.StringToHash(isUnarmedParameter);
+        weaponStyleHash = Animator.StringToHash(weaponStyleParameter);
     }
 
     private void Start()
     {
-        if (animator != null)
-            animator.SetBool(isUnarmedHash, isUnarmed);
-    }
+        if (hitboxController != null)
+            hitboxController.SetOwnerRoot(transform.root);
+
+        if (currentWeaponObject != null)
+        {
+            currentWeaponObject.SetActive(true);
+            weaponHitbox = currentWeaponObject.GetComponentInChildren<WeaponHitbox>(true);
+
+            if (weaponHitbox != null)
+                weaponHitbox.SetOwnerRoot(transform.root);
+        }
+        else
+        {
+            weaponHitbox = null;
+            currentWeaponStyle = WeaponStyle.Unarmed;
+        }
+
+    UpdateAnimatorWeaponStyle();
+}
 
     private void Update()
     {
@@ -76,13 +94,14 @@ public class PlayerCombat : MonoBehaviour
             return;
 
         if (Mouse.current.leftButton.wasPressedThisFrame)
-        {
             TryAttack();
-        }
     }
 
     public void TryAttack()
     {
+        if (health != null && health.IsDead)
+            return;
+
         if (isAttacking)
             return;
 
@@ -92,7 +111,7 @@ public class PlayerCombat : MonoBehaviour
         if (playerDodge != null && playerDodge.IsDodging)
             return;
 
-        float staminaCost = isUnarmed ? unarmedAttackCost : weaponAttackCost;
+        float staminaCost = IsUnarmed ? unarmedAttackCost : weaponAttackCost;
 
         if (stamina != null && !stamina.UseStamina(staminaCost))
         {
@@ -105,24 +124,84 @@ public class PlayerCombat : MonoBehaviour
         animator.SetBool(walkHash, false);
         animator.SetBool(runHash, false);
 
-        if (isUnarmed)
+        UpdateAnimatorWeaponStyle();
+
+        animator.ResetTrigger(attackHash);
+        animator.SetTrigger(attackHash);
+    }
+
+    public void EquipWeapon(WeaponStyle newStyle, GameObject newWeaponObject)
+    {
+        if (newWeaponObject == null)
         {
-            animator.ResetTrigger(punchHash);
-            animator.SetTrigger(punchHash);
+            Debug.LogError("EquipWeapon: newWeaponObject está vacío.");
+            return;
+        }
+
+        if (newWeaponObject == gameObject || newWeaponObject.transform == transform)
+        {
+            Debug.LogError("EquipWeapon: has asignado el Player como arma.");
+            return;
+        }
+
+        if (!newWeaponObject.transform.IsChildOf(transform))
+        {
+            Debug.LogError("EquipWeapon: el arma equipada debe ser hija del Player. Objeto recibido: " + newWeaponObject.name);
+            return;
+        }
+
+        if (currentWeaponObject != null)
+        {
+            if (currentWeaponObject == gameObject || currentWeaponObject.transform == transform)
+            {
+                Debug.LogError("currentWeaponObject apunta al Player. Lo limpio para no desactivar el personaje.");
+                currentWeaponObject = null;
+            }
+            else
+            {
+                currentWeaponObject.SetActive(false);
+            }
+        }
+
+        currentWeaponStyle = newStyle;
+        currentWeaponObject = newWeaponObject;
+        currentWeaponObject.SetActive(true);
+
+        weaponHitbox = currentWeaponObject.GetComponentInChildren<WeaponHitbox>(true);
+
+        UpdateAnimatorWeaponStyle();
+
+        if (weaponHitbox != null)
+        {
+            weaponHitbox.SetOwnerRoot(transform.root);
+            Debug.Log("WeaponHitbox asignado: " + weaponHitbox.name);
         }
         else
         {
-            animator.ResetTrigger(attackHash);
-            animator.SetTrigger(attackHash);
+            Debug.LogError("No se encontró WeaponHitbox en " + currentWeaponObject.name);
         }
+
+        Debug.Log("Arma equipada: " + currentWeaponStyle + " / " + currentWeaponObject.name);
     }
 
-    public void SetUnarmed(bool value)
+    public void UnequipWeapon()
     {
-        isUnarmed = value;
+        if (currentWeaponObject != null)
+            currentWeaponObject.SetActive(false);
 
+        currentWeaponObject = null;
+        weaponHitbox = null;
+        currentWeaponStyle = WeaponStyle.Unarmed;
+
+        UpdateAnimatorWeaponStyle();
+
+        Debug.Log("Sin arma equipada.");
+    }
+
+    private void UpdateAnimatorWeaponStyle()
+    {
         if (animator != null)
-            animator.SetBool(isUnarmedHash, isUnarmed);
+            animator.SetInteger(weaponStyleHash, (int)currentWeaponStyle);
     }
 
     public void SetWeaponHitbox(WeaponHitbox newHitbox)
@@ -132,19 +211,38 @@ public class PlayerCombat : MonoBehaviour
 
     public void EnableHitbox()
     {
-        if (hitboxController != null)
-            hitboxController.EnableHitbox();
+        if (IsUnarmed)
+        {
+            if (hitboxController != null)
+                hitboxController.EnableHitbox();
+
+            return;
+        }
+
+        if (weaponHitbox != null)
+            weaponHitbox.StartSwing();
     }
 
     public void DisableHitbox()
     {
-        if (hitboxController != null)
-            hitboxController.DisableHitbox();
+        if (IsUnarmed)
+        {
+            if (hitboxController != null)
+                hitboxController.DisableHitbox();
+
+            return;
+        }
+
+        if (weaponHitbox != null)
+            weaponHitbox.EndSwing();
     }
 
     public void EndAttack()
     {
         isAttacking = false;
+
+        if (hitboxController != null)
+            hitboxController.DisableHitbox();
 
         if (weaponHitbox != null)
             weaponHitbox.EndSwing();

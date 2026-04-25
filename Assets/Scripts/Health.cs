@@ -17,6 +17,8 @@ public class Health : MonoBehaviour
     [SerializeField] private string hitTriggerName = "Hit";
     [SerializeField] private string attackTriggerName = "Attack";
     [SerializeField] private bool useDeathCamera = false;
+    [Header("Combat")]
+    [SerializeField] private bool isEnemy = false;
 
     private int currentHealth;
     private Color originalColor;
@@ -53,6 +55,8 @@ public class Health : MonoBehaviour
     {
         deathCam = FindFirstObjectByType<DeathCinemachineController>();
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
+        if (isEnemy && CombatManager.Instance != null)
+            CombatManager.Instance.RegisterEnemy(this);
     }
 
     public void TakeDamage(int damage)
@@ -144,6 +148,30 @@ public class Health : MonoBehaviour
 
             agent.enabled = false;
         }
+
+        CharacterController controller = GetComponent<CharacterController>();
+        if (controller != null)
+            controller.enabled = false;
+
+        PlayerMove playerMove = GetComponent<PlayerMove>();
+        if (playerMove != null)
+            playerMove.enabled = false;
+
+        PlayerCombat playerCombat = GetComponent<PlayerCombat>();
+        if (playerCombat != null)
+            playerCombat.enabled = false;
+
+        PlayerBlock playerBlock = GetComponent<PlayerBlock>();
+        if (playerBlock != null)
+            playerBlock.enabled = false;
+
+        PlayerDodge playerDodge = GetComponent<PlayerDodge>();
+        if (playerDodge != null)
+            playerDodge.enabled = false;
+
+        PlayerDefense playerDefense = GetComponent<PlayerDefense>();
+        if (playerDefense != null)
+            playerDefense.enabled = false;
 
         OnDied?.Invoke();
 

@@ -10,12 +10,14 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float blockMoveSpeed = 1.5f;
     [SerializeField] private float rotationSpeed = 10f;
 
-    [Header("Gravedad")]
+    [Header("Salto y gravedad")]
+    [SerializeField] private float jumpHeight = 1.2f;
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float groundedForce = -2f;
 
     [Header("Restricciones")]
     [SerializeField] private bool blockMovementWhileAttacking = true;
+    [SerializeField] private bool allowJumpWhileBlocking = false;
 
     [Header("Referencias")]
     [SerializeField] private Transform cameraTransform;
@@ -23,16 +25,21 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private PlayerCombat playerCombat;
     [SerializeField] private PlayerBlock playerBlock;
     [SerializeField] private PlayerDodge playerDodge;
+    [SerializeField] private Health health;
 
     [Header("Animator Parameters")]
     [SerializeField] private string walkParameter = "Walk";
     [SerializeField] private string runParameter = "Run";
+    [SerializeField] private string jumpParameter = "Jump";
+    [SerializeField] private string groundedParameter = "IsGrounded";
 
     private CharacterController controller;
     private Vector3 verticalVelocity;
 
     private int walkHash;
     private int runHash;
+    private int jumpHash;
+    private int groundedHash;
 
     private void Awake()
     {
@@ -53,22 +60,38 @@ public class PlayerMove : MonoBehaviour
         if (playerDodge == null)
             playerDodge = GetComponent<PlayerDodge>();
 
+        if (health == null)
+            health = GetComponent<Health>();
+
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
         walkHash = Animator.StringToHash(walkParameter);
         runHash = Animator.StringToHash(runParameter);
+        jumpHash = Animator.StringToHash(jumpParameter);
+        groundedHash = Animator.StringToHash(groundedParameter);
     }
 
     private void Update()
     {
+        if (controller == null || !controller.enabled || !gameObject.activeInHierarchy)
+            return;
+
+        if (health != null && health.IsDead)
+        {
+            SetMovementAnimator(false, false);
+            return;
+        }
+
+        HandleJump();
         HandleMovement();
         ApplyGravity();
+        UpdateGroundedAnimator();
     }
 
     private void HandleMovement()
     {
-        if (cameraTransform == null || animator == null)
+        if (cameraTransform == null)
             return;
 
         if (playerDodge != null && playerDodge.IsDodging)
@@ -99,8 +122,6 @@ public class PlayerMove : MonoBehaviour
         bool wantsRun = hasInput && Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
         bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
 
-        Vector3 inputDirection = new Vector3(moveInput.x, 0f, moveInput.y);
-
         if (hasInput)
         {
             Vector3 cameraForward = cameraTransform.forward;
@@ -112,24 +133,24 @@ public class PlayerMove : MonoBehaviour
             cameraForward.Normalize();
             cameraRight.Normalize();
 
-            Vector3 moveDirection = (cameraForward * inputDirection.z + cameraRight * inputDirection.x).normalized;
+            Vector3 moveDirection = (cameraForward * moveInput.y + cameraRight * moveInput.x).normalized;
 
             if (moveDirection.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    targetRotation,
+                    rotationSpeed * Time.deltaTime
+                );
             }
 
-            float speed;
+            float speed = walkSpeed;
 
             if (isBlocking)
-            {
                 speed = blockMoveSpeed;
-            }
-            else
-            {
-                speed = wantsRun ? runSpeed : walkSpeed;
-            }
+            else if (wantsRun)
+                speed = runSpeed;
 
             controller.Move(moveDirection * speed * Time.deltaTime);
         }
@@ -138,6 +159,35 @@ public class PlayerMove : MonoBehaviour
         bool isWalking = hasInput && !isRunning;
 
         SetMovementAnimator(isWalking, isRunning);
+    }
+
+    private void HandleJump()
+    {
+        if (Keyboard.current == null)
+            return;
+
+        if (!Keyboard.current.spaceKey.wasPressedThisFrame)
+            return;
+
+        if (!controller.isGrounded)
+            return;
+
+        if (playerDodge != null && playerDodge.IsDodging)
+            return;
+
+        if (playerCombat != null && playerCombat.IsAttacking)
+            return;
+
+        if (!allowJumpWhileBlocking && playerBlock != null && playerBlock.IsBlocking)
+            return;
+
+        verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+
+        if (animator != null)
+        {
+            animator.ResetTrigger(jumpHash);
+            animator.SetTrigger(jumpHash);
+        }
     }
 
     private void ApplyGravity()
@@ -149,8 +199,19 @@ public class PlayerMove : MonoBehaviour
         controller.Move(verticalVelocity * Time.deltaTime);
     }
 
+    private void UpdateGroundedAnimator()
+    {
+        if (animator == null || controller == null)
+            return;
+
+        animator.SetBool(groundedHash, controller.isGrounded);
+    }
+
     private void SetMovementAnimator(bool walk, bool run)
     {
+        if (animator == null)
+            return;
+
         animator.SetBool(walkHash, walk);
         animator.SetBool(runHash, run);
     }
