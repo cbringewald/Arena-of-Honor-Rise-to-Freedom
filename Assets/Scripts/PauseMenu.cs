@@ -11,6 +11,11 @@ public class PauseMenu : MonoBehaviour
     [Header("Scenes")]
     [SerializeField] private string mainMenuSceneName = "MainMenu";
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource sfxSource;
+    [SerializeField] private AudioClip openPauseSound;
+    [SerializeField] private AudioClip clickSound;
+
     private bool isPaused = false;
 
     void Start()
@@ -57,6 +62,16 @@ public class PauseMenu : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
+        PlaySound(openPauseSound);
+
+        
+    }
+
+    private void PlaySound(AudioClip clip)
+    {
+        if (sfxSource != null && clip != null)
+            sfxSource.PlayOneShot(clip);
     }
 
     public void ResumeGame()

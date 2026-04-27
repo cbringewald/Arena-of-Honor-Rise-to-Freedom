@@ -16,8 +16,14 @@ public class WeaponHitbox : MonoBehaviour
     [SerializeField] private float cameraShakeDuration = 0.08f;
     [SerializeField] private float cameraShakeMagnitude = 0.08f;
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip hitSound;
+
     private readonly HashSet<Health> damagedTargets = new HashSet<Health>();
     private bool swingActive;
+    private static float lastHitstopTime;
+    private const float hitstopCooldown = 0.15f;
 
     public void StartSwing()
     {
@@ -109,12 +115,24 @@ public class WeaponHitbox : MonoBehaviour
         damagedTargets.Add(health);
     }
 
+
     private void ApplyImpactFeedback()
     {
         if (useHitstop && HitstopManager.Instance != null)
-            HitstopManager.Instance.DoHitstop(hitstopDuration, hitstopTimeScale);
+        {
+            if (Time.unscaledTime >= lastHitstopTime + hitstopCooldown)
+            {
+                lastHitstopTime = Time.unscaledTime;
+                HitstopManager.Instance.DoHitstop(hitstopDuration, hitstopTimeScale);
+            }
+        }
 
         if (useCameraShake && CameraShake.Instance != null)
+        {
             CameraShake.Instance.Shake(cameraShakeDuration, cameraShakeMagnitude);
+        }
+
+        if (audioSource != null && hitSound != null)
+            audioSource.PlayOneShot(hitSound);
     }
 }

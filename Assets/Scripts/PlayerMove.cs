@@ -4,6 +4,12 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMove : MonoBehaviour
 {
+    [Header("Footsteps Audio")]
+    [SerializeField] private AudioSource footstepSource;
+    [SerializeField] private float walkPitch = 1f;
+    [SerializeField] private float runPitch = 1.5f;
+
+private float nextStepTime;
     [Header("Movimiento")]
     [SerializeField] private float walkSpeed = 2.5f;
     [SerializeField] private float runSpeed = 5.5f;
@@ -14,6 +20,10 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float jumpHeight = 1.2f;
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float groundedForce = -2f;
+
+    [Header("Jump Control")]
+    [SerializeField] private float jumpCooldown = 0.35f;
+    [SerializeField] private float groundedGraceTime = 0.15f;
 
     [Header("Restricciones")]
     [SerializeField] private bool blockMovementWhileAttacking = true;
@@ -40,6 +50,9 @@ public class PlayerMove : MonoBehaviour
     private int runHash;
     private int jumpHash;
     private int groundedHash;
+    private bool isJumping;
+    private float lastJumpTime;
+    private float lastGroundedTime;
 
     private void Awake()
     {
@@ -83,6 +96,14 @@ public class PlayerMove : MonoBehaviour
             return;
         }
 
+        if (controller.isGrounded)
+        {
+            lastGroundedTime = Time.time;
+
+        if (Time.time > lastJumpTime + jumpCooldown && verticalVelocity.y <= 0f)
+            isJumping = false;
+        }
+
         HandleJump();
         HandleMovement();
         ApplyGravity();
@@ -97,12 +118,14 @@ public class PlayerMove : MonoBehaviour
         if (playerDodge != null && playerDodge.IsDodging)
         {
             SetMovementAnimator(false, false);
+            HandleFootsteps(false, false);
             return;
         }
 
         if (blockMovementWhileAttacking && playerCombat != null && playerCombat.IsAttacking)
         {
             SetMovementAnimator(false, false);
+            HandleFootsteps(false, false);
             return;
         }
 
@@ -117,7 +140,7 @@ public class PlayerMove : MonoBehaviour
         }
 
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
-
+        
         bool hasInput = moveInput.sqrMagnitude > 0.01f;
         bool wantsRun = hasInput && Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
         bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
@@ -157,7 +180,20 @@ public class PlayerMove : MonoBehaviour
 
         bool isRunning = hasInput && wantsRun && !isBlocking;
         bool isWalking = hasInput && !isRunning;
+        bool movementKeyPressed =
+            Keyboard.current != null &&
+            (Keyboard.current.wKey.isPressed ||
+            Keyboard.current.aKey.isPressed ||
+            Keyboard.current.sKey.isPressed ||
+            Keyboard.current.dKey.isPressed);
 
+        bool shouldPlayFootsteps =
+            movementKeyPressed &&
+            !isBlocking &&
+            (playerCombat == null || !playerCombat.IsAttacking) &&
+            (playerDodge == null || !playerDodge.IsDodging);
+
+        HandleFootsteps(shouldPlayFootsteps, isRunning);
         SetMovementAnimator(isWalking, isRunning);
     }
 
@@ -169,7 +205,15 @@ public class PlayerMove : MonoBehaviour
         if (!Keyboard.current.spaceKey.wasPressedThisFrame)
             return;
 
-        if (!controller.isGrounded)
+        if (isJumping)
+            return;
+
+        if (Time.time < lastJumpTime + jumpCooldown)
+            return;
+
+        bool canJump = Time.time <= lastGroundedTime + groundedGraceTime;
+
+        if (!canJump)
             return;
 
         if (playerDodge != null && playerDodge.IsDodging)
@@ -181,8 +225,13 @@ public class PlayerMove : MonoBehaviour
         if (!allowJumpWhileBlocking && playerBlock != null && playerBlock.IsBlocking)
             return;
 
+        isJumping = true;
+        lastJumpTime = Time.time;
+
         verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
 
+        SetMovementAnimator(false, false);
+        
         if (animator != null)
         {
             animator.ResetTrigger(jumpHash);
@@ -214,5 +263,30 @@ public class PlayerMove : MonoBehaviour
 
         animator.SetBool(walkHash, walk);
         animator.SetBool(runHash, run);
+    }
+
+    private void HandleFootsteps(bool shouldPlay, bool isRunning)
+    {
+        if (footstepSource == null)
+            return;
+
+        footstepSource.loop = true;
+        footstepSource.pitch = isRunning ? runPitch : walkPitch;
+
+        if (shouldPlay)
+        {
+            if (!footstepSource.isPlaying)
+            {
+                if (footstepSource.time > 0f)
+                    footstepSource.UnPause();
+                else
+                    footstepSource.Play();
+            }
+        }
+        else
+        {
+            if (footstepSource.isPlaying)
+                footstepSource.Pause();
+        }
     }
 }

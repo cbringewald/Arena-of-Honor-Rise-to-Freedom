@@ -20,6 +20,11 @@ public class Health : MonoBehaviour
     [Header("Combat")]
     [SerializeField] private bool isEnemy = false;
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip hurtSound;
+    [SerializeField] private AudioClip deathSound;
+
     private int currentHealth;
     private Color originalColor;
     private bool isDead;
@@ -36,6 +41,7 @@ public class Health : MonoBehaviour
     public event Action<int, int> OnHealthChanged;
     public event Action<int, string> OnDamaged;
     public event Action OnDied;
+    
 
     private void Awake()
     {
@@ -75,6 +81,9 @@ public class Health : MonoBehaviour
 
         Debug.Log($"{gameObject.name} recibió {damage} de daño en {hitZone}. Vida: {currentHealth}");
 
+        if (audioSource != null && hurtSound != null)
+            audioSource.PlayOneShot(hurtSound);
+
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
         // Si el golpe mata, NO disparamos OnDamaged para evitar que la IA lance Hit
@@ -93,7 +102,25 @@ public class Health : MonoBehaviour
             hitFlashCoroutine = StartCoroutine(HitFlash());
         }
 
+        if (animator != null && !string.IsNullOrEmpty(hitTriggerName))
+        {
+            animator.ResetTrigger(hitTriggerName);
+            animator.SetTrigger(hitTriggerName);
+        }
+
         OnDamaged?.Invoke(damage, hitZone);
+    }
+
+    public void SetMaxHealth(int newMaxHealth, bool refillHealth)
+    {
+        maxHealth = Mathf.Max(1, newMaxHealth);
+
+        if (refillHealth)
+            currentHealth = maxHealth;
+        else
+            currentHealth = Mathf.Min(currentHealth, maxHealth);
+
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     public void Heal(int amount)
@@ -122,6 +149,8 @@ public class Health : MonoBehaviour
     {
         if (isDead) return;
         isDead = true;
+        if (audioSource != null && deathSound != null)
+            audioSource.PlayOneShot(deathSound);
 
         Debug.Log(gameObject.name + " -> Die() llamada");
 
