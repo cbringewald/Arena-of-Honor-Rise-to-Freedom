@@ -9,7 +9,6 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private float walkPitch = 1f;
     [SerializeField] private float runPitch = 1.5f;
 
-private float nextStepTime;
     [Header("Movimiento")]
     [SerializeField] private float walkSpeed = 2.5f;
     [SerializeField] private float runSpeed = 5.5f;
@@ -24,6 +23,13 @@ private float nextStepTime;
     [Header("Jump Control")]
     [SerializeField] private float jumpCooldown = 0.35f;
     [SerializeField] private float groundedGraceTime = 0.15f;
+
+    [Header("Stamina")]
+    [SerializeField] private Stamina stamina;
+    [SerializeField] private bool runUsesStamina = true;
+    [SerializeField] private bool jumpUsesStamina = true;
+    [SerializeField] private float runStaminaCostPerSecond = 12f;
+    [SerializeField] private float jumpStaminaCost = 18f;
 
     [Header("Restricciones")]
     [SerializeField] private bool blockMovementWhileAttacking = true;
@@ -50,6 +56,7 @@ private float nextStepTime;
     private int runHash;
     private int jumpHash;
     private int groundedHash;
+
     private bool isJumping;
     private float lastJumpTime;
     private float lastGroundedTime;
@@ -76,6 +83,9 @@ private float nextStepTime;
         if (health == null)
             health = GetComponent<Health>();
 
+        if (stamina == null)
+            stamina = GetComponent<Stamina>();
+
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
@@ -93,6 +103,7 @@ private float nextStepTime;
         if (health != null && health.IsDead)
         {
             SetMovementAnimator(false, false);
+            HandleFootsteps(false, false);
             return;
         }
 
@@ -100,8 +111,8 @@ private float nextStepTime;
         {
             lastGroundedTime = Time.time;
 
-        if (Time.time > lastJumpTime + jumpCooldown && verticalVelocity.y <= 0f)
-            isJumping = false;
+            if (Time.time > lastJumpTime + jumpCooldown && verticalVelocity.y <= 0f)
+                isJumping = false;
         }
 
         HandleJump();
@@ -140,10 +151,16 @@ private float nextStepTime;
         }
 
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
-        
+
         bool hasInput = moveInput.sqrMagnitude > 0.01f;
-        bool wantsRun = hasInput && Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
         bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
+        bool wantsRun =
+            hasInput &&
+            !isBlocking &&
+            Keyboard.current != null &&
+            Keyboard.current.leftShiftKey.isPressed;
+
+        bool isRunning = false;
 
         if (hasInput)
         {
@@ -161,6 +178,7 @@ private float nextStepTime;
             if (moveDirection.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
+
                 transform.rotation = Quaternion.Slerp(
                     transform.rotation,
                     targetRotation,
@@ -171,21 +189,26 @@ private float nextStepTime;
             float speed = walkSpeed;
 
             if (isBlocking)
+            {
                 speed = blockMoveSpeed;
-            else if (wantsRun)
+            }
+            else if (wantsRun && CanRunThisFrame())
+            {
                 speed = runSpeed;
+                isRunning = true;
+            }
 
             controller.Move(moveDirection * speed * Time.deltaTime);
         }
 
-        bool isRunning = hasInput && wantsRun && !isBlocking;
         bool isWalking = hasInput && !isRunning;
+
         bool movementKeyPressed =
             Keyboard.current != null &&
             (Keyboard.current.wKey.isPressed ||
-            Keyboard.current.aKey.isPressed ||
-            Keyboard.current.sKey.isPressed ||
-            Keyboard.current.dKey.isPressed);
+             Keyboard.current.aKey.isPressed ||
+             Keyboard.current.sKey.isPressed ||
+             Keyboard.current.dKey.isPressed);
 
         bool shouldPlayFootsteps =
             movementKeyPressed &&
@@ -195,6 +218,19 @@ private float nextStepTime;
 
         HandleFootsteps(shouldPlayFootsteps, isRunning);
         SetMovementAnimator(isWalking, isRunning);
+    }
+
+    private bool CanRunThisFrame()
+    {
+        if (!runUsesStamina)
+            return true;
+
+        if (stamina == null)
+            return true;
+
+        float cost = runStaminaCostPerSecond * Time.deltaTime;
+
+        return stamina.UseStamina(cost);
     }
 
     private void HandleJump()
@@ -225,13 +261,19 @@ private float nextStepTime;
         if (!allowJumpWhileBlocking && playerBlock != null && playerBlock.IsBlocking)
             return;
 
+        if (jumpUsesStamina && stamina != null)
+        {
+            if (!stamina.UseStamina(jumpStaminaCost))
+                return;
+        }
+
         isJumping = true;
         lastJumpTime = Time.time;
 
         verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
 
         SetMovementAnimator(false, false);
-        
+
         if (animator != null)
         {
             animator.ResetTrigger(jumpHash);

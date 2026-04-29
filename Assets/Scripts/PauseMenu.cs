@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class PauseMenu : MonoBehaviour
 {
@@ -11,27 +12,68 @@ public class PauseMenu : MonoBehaviour
     [Header("Scenes")]
     [SerializeField] private string mainMenuSceneName = "MainMenu";
 
-    [Header("Audio")]
+    [Header("Audio Sources")]
     [SerializeField] private AudioSource sfxSource;
+    [SerializeField] private AudioSource musicSource;
+    [SerializeField] private AudioSource ambienceSource;
+
+    [Header("Audio Clips")]
     [SerializeField] private AudioClip openPauseSound;
     [SerializeField] private AudioClip clickSound;
 
+    [Header("Options UI")]
+    [SerializeField] private Slider musicVolumeSlider;
+    [SerializeField] private Slider ambienceVolumeSlider;
+
+    [Header("Cursor")]
+    [SerializeField] private bool lockCursorWhenPlaying = true;
+
+    private const string MusicVolumeKey = "MusicVolume";
+    private const string AmbienceVolumeKey = "AmbienceVolume";
+
+    [SerializeField, Range(0f, 1f)] private float defaultMusicVolume = 0f;
+    [SerializeField, Range(0f, 1f)] private float defaultAmbienceVolume = 0.7f;
+
     private bool isPaused = false;
 
-    void Start()
+    private void Awake()
     {
-        if (pauseMenuUI == null) Debug.LogError("PauseMenu: Asigna PauseContent a pauseMenuUI en el Inspector.");
-        if (optionsMenuUI == null) Debug.LogError("PauseMenu: Asigna OptionsMenu a optionsMenuUI en el Inspector.");
+        if (sfxSource != null)
+        {
+            sfxSource.playOnAwake = false;
+            sfxSource.ignoreListenerPause = true;
+        }
 
-        if (pauseMenuUI != null) pauseMenuUI.SetActive(false);
-        if (optionsMenuUI != null) optionsMenuUI.SetActive(false);
+        if (musicSource != null)
+            musicSource.playOnAwake = true;
 
-        ResumeGame();
+        if (ambienceSource != null)
+            ambienceSource.playOnAwake = true;
     }
 
-    void Update()
+    private void Start()
     {
-        if (Keyboard.current == null) return;
+        if (pauseMenuUI == null)
+            Debug.LogError("PauseMenu: Asigna PauseContent a pauseMenuUI en el Inspector.");
+
+        if (optionsMenuUI == null)
+            Debug.LogError("PauseMenu: Asigna OptionsMenu a optionsMenuUI en el Inspector.");
+
+        if (pauseMenuUI != null)
+            pauseMenuUI.SetActive(false);
+
+        if (optionsMenuUI != null)
+            optionsMenuUI.SetActive(false);
+
+        LoadAudioOptions();
+
+        ResumeGame(false);
+    }
+
+    private void Update()
+    {
+        if (Keyboard.current == null)
+            return;
 
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
         {
@@ -47,7 +89,7 @@ public class PauseMenu : MonoBehaviour
                 return;
             }
 
-            ResumeGame();
+            ResumeGame(true);
         }
     }
 
@@ -55,8 +97,11 @@ public class PauseMenu : MonoBehaviour
     {
         isPaused = true;
 
-        if (pauseMenuUI != null) pauseMenuUI.SetActive(true);
-        if (optionsMenuUI != null) optionsMenuUI.SetActive(false);
+        if (pauseMenuUI != null)
+            pauseMenuUI.SetActive(true);
+
+        if (optionsMenuUI != null)
+            optionsMenuUI.SetActive(false);
 
         Time.timeScale = 0f;
 
@@ -64,47 +109,61 @@ public class PauseMenu : MonoBehaviour
         Cursor.visible = true;
 
         PlaySound(openPauseSound);
-
-        
-    }
-
-    private void PlaySound(AudioClip clip)
-    {
-        if (sfxSource != null && clip != null)
-            sfxSource.PlayOneShot(clip);
     }
 
     public void ResumeGame()
     {
+        ResumeGame(true);
+    }
+
+    private void ResumeGame(bool playSound)
+    {
+        if (playSound)
+            PlayClick();
+
         isPaused = false;
 
-        if (pauseMenuUI != null) pauseMenuUI.SetActive(false);
-        if (optionsMenuUI != null) optionsMenuUI.SetActive(false);
+        if (pauseMenuUI != null)
+            pauseMenuUI.SetActive(false);
+
+        if (optionsMenuUI != null)
+            optionsMenuUI.SetActive(false);
 
         Time.timeScale = 1f;
 
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        if (lockCursorWhenPlaying)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
     }
 
     public void OpenOptions()
     {
-        if (pauseMenuUI == null || optionsMenuUI == null) return;
+        PlayClick();
 
-        pauseMenuUI.SetActive(false);
-        optionsMenuUI.SetActive(true);
+        if (pauseMenuUI != null)
+            pauseMenuUI.SetActive(false);
+
+        if (optionsMenuUI != null)
+            optionsMenuUI.SetActive(true);
     }
 
     public void CloseOptions()
     {
-        if (pauseMenuUI == null || optionsMenuUI == null) return;
+        PlayClick();
 
-        optionsMenuUI.SetActive(false);
-        pauseMenuUI.SetActive(true);
+        if (optionsMenuUI != null)
+            optionsMenuUI.SetActive(false);
+
+        if (pauseMenuUI != null)
+            pauseMenuUI.SetActive(true);
     }
 
     public void BackToMainMenu()
     {
+        PlayClick();
+
         Time.timeScale = 1f;
 
         Cursor.lockState = CursorLockMode.None;
@@ -115,19 +174,92 @@ public class PauseMenu : MonoBehaviour
 
     public void QuitGame()
     {
+        PlayClick();
+
         Time.timeScale = 1f;
-        Application.Quit();
+
+        BackToMainMenu();
     }
 
     public void SetFullscreen(bool value)
     {
-        Debug.Log("Fullscreen: " + value);
         Screen.fullScreen = value;
     }
 
     public void SetMusicVolume(float value)
     {
-        Debug.Log("Music volume: " + value);
+        value = Mathf.Clamp01(value);
+
+        if (musicSource != null)
+            musicSource.volume = value;
+
+        PlayerPrefs.SetFloat(MusicVolumeKey, value);
+        PlayerPrefs.Save();
+    }
+
+    public void SetAmbienceVolume(float value)
+    {
+        value = Mathf.Clamp01(value);
+
+        if (ambienceSource != null)
+            ambienceSource.volume = value;
+
+        PlayerPrefs.SetFloat(AmbienceVolumeKey, value);
+        PlayerPrefs.Save();
+    }
+
+    private void LoadAudioOptions()
+    {
+        float savedMusicVolume = PlayerPrefs.HasKey(MusicVolumeKey)
+            ? PlayerPrefs.GetFloat(MusicVolumeKey)
+            : defaultMusicVolume;
+
+        float savedAmbienceVolume = PlayerPrefs.HasKey(AmbienceVolumeKey)
+            ? PlayerPrefs.GetFloat(AmbienceVolumeKey)
+            : defaultAmbienceVolume;
+
+        savedMusicVolume = Mathf.Clamp01(savedMusicVolume);
+        savedAmbienceVolume = Mathf.Clamp01(savedAmbienceVolume);
+
+        if (musicSource != null)
+            musicSource.volume = savedMusicVolume;
+
+        if (ambienceSource != null)
+            ambienceSource.volume = savedAmbienceVolume;
+
+        if (musicVolumeSlider != null)
+        {
+            musicVolumeSlider.SetValueWithoutNotify(savedMusicVolume);
+            musicVolumeSlider.onValueChanged.RemoveListener(SetMusicVolume);
+            musicVolumeSlider.onValueChanged.AddListener(SetMusicVolume);
+        }
+
+        if (ambienceVolumeSlider != null)
+        {
+            ambienceVolumeSlider.SetValueWithoutNotify(savedAmbienceVolume);
+            ambienceVolumeSlider.onValueChanged.RemoveListener(SetAmbienceVolume);
+            ambienceVolumeSlider.onValueChanged.AddListener(SetAmbienceVolume);
+        }
+    }
+
+    private void PlayClick()
+    {
+        PlaySound(clickSound);
+    }
+
+    private void PlaySound(AudioClip clip)
+    {
+        if (sfxSource == null)
+            return;
+
+        if (clip == null)
+            return;
+
+        sfxSource.PlayOneShot(clip);
+    }
+
+    private void OnDisable()
+    {
+        Time.timeScale = 1f;
     }
 }
-

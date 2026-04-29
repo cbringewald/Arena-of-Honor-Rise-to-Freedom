@@ -21,10 +21,6 @@ public class RoundData
 
     [Header("Unlocked Weapons")]
     public GameObject[] unlockedWeaponPickups;
-
-    [Header("Audio")]
-    [SerializeField] private AudioSource sfxSource;
-    [SerializeField] private AudioClip victorySound;
 }
 
 public class RoundManager : MonoBehaviour
@@ -51,23 +47,31 @@ public class RoundManager : MonoBehaviour
     [Header("Fame")]
     [SerializeField] private int fame = 0;
     [SerializeField] private int fameGoal = 100;
+    [SerializeField] private bool winWhenFameGoalReached = true;
 
     [Header("UI")]
     [SerializeField] private TMP_Text roundText;
     [SerializeField] private TMP_Text fameText;
+
+    [Header("Old Message UI Fallback")]
     [SerializeField] private TMP_Text messageText;
+
+    [Header("New Round Message UI")]
+    [SerializeField] private RoundMessageUI roundMessageUI;
 
     [Header("Timing")]
     [SerializeField] private float messageDuration = 3f;
     [SerializeField] private float nextRoundDelay = 1f;
 
+    [Header("Final Victory")]
     [SerializeField] private FadeController fadeController;
+    [SerializeField] private string mainMenuSceneName = "MainMenu";
     [SerializeField] private float timeBeforeFade = 3f;
     [SerializeField] private float timeBeforeLoadMenu = 2f;
-    
 
     private int currentRoundIndex = 0;
     private bool roundEnded;
+    private bool finalVictoryStarted;
 
     private Coroutine messageCoroutine;
 
@@ -88,6 +92,9 @@ public class RoundManager : MonoBehaviour
         if (messageText != null)
             messageText.gameObject.SetActive(false);
 
+        if (roundMessageUI != null)
+            roundMessageUI.HideInstant();
+
         ResetPlayerToSpawn();
         StartRound();
         UpdateUI();
@@ -97,7 +104,7 @@ public class RoundManager : MonoBehaviour
     {
         if (currentRoundIndex < 0 || currentRoundIndex >= rounds.Count)
         {
-            FinalVictory();
+            StartCoroutine(FinalVictoryRoutine());
             return;
         }
 
@@ -114,8 +121,22 @@ public class RoundManager : MonoBehaviour
 
         RoundData data = rounds[currentRoundIndex];
 
+        string messageToShow;
+
         if (!string.IsNullOrWhiteSpace(data.startMessage))
-            ShowMessageTimed(data.startMessage);
+        {
+            messageToShow = data.startMessage;
+        }
+        else if (currentRoundIndex >= rounds.Count - 1)
+        {
+            messageToShow = "RONDA FINAL\nLucha por tu libertad";
+        }
+        else
+        {
+            messageToShow = data.roundName + "\n¡Prepárate!";
+        }
+
+        ShowMessageTimed(messageToShow);
     }
 
     private void ResetPlayerWeapon()
@@ -126,9 +147,11 @@ public class RoundManager : MonoBehaviour
 
     private void SetupWeaponUnlocks()
     {
-        // Primero apagamos todas las armas que estén configuradas en cualquier ronda
         foreach (RoundData round in rounds)
         {
+            if (round.unlockedWeaponPickups == null)
+                continue;
+
             foreach (GameObject weapon in round.unlockedWeaponPickups)
             {
                 if (weapon != null)
@@ -136,9 +159,11 @@ public class RoundManager : MonoBehaviour
             }
         }
 
-        // Luego encendemos las armas desbloqueadas hasta la ronda actual
-        for (int i = 0; i <= currentRoundIndex; i++)
+        for (int i = 0; i <= currentRoundIndex && i < rounds.Count; i++)
         {
+            if (rounds[i].unlockedWeaponPickups == null)
+                continue;
+
             foreach (GameObject weapon in rounds[i].unlockedWeaponPickups)
             {
                 if (weapon != null)
@@ -173,6 +198,7 @@ public class RoundManager : MonoBehaviour
             spawnedEnemies.Add(enemy);
 
             Health health = enemy.GetComponent<Health>();
+
             if (health == null)
                 health = enemy.GetComponentInChildren<Health>();
 
@@ -187,6 +213,7 @@ public class RoundManager : MonoBehaviour
             aliveEnemies.Add(health);
 
             BotAI bot = enemy.GetComponent<BotAI>();
+
             if (bot == null)
                 bot = enemy.GetComponentInChildren<BotAI>();
 
@@ -196,12 +223,18 @@ public class RoundManager : MonoBehaviour
                 Debug.LogWarning("El enemigo instanciado no tiene BotAI.");
         }
 
-        Debug.Log(data.roundName + " creada con " + data.enemyCount + " enemigo(s).");
+        Debug.Log(data.roundName + " creada con " + aliveEnemies.Count + " enemigo(s).");
+
+        if (aliveEnemies.Count <= 0)
+        {
+            Debug.LogWarning("La ronda no tiene enemigos vivos registrados. Se completará automáticamente.");
+            EndRound();
+        }
     }
 
     private void OnEnemyDied()
     {
-        if (roundEnded)
+        if (roundEnded || finalVictoryStarted)
             return;
 
         aliveEnemies.RemoveAll(enemy => enemy == null || enemy.IsDead);
@@ -212,7 +245,7 @@ public class RoundManager : MonoBehaviour
 
     private void EndRound()
     {
-        if (roundEnded)
+        if (roundEnded || finalVictoryStarted)
             return;
 
         roundEnded = true;
@@ -223,13 +256,15 @@ public class RoundManager : MonoBehaviour
                 enemy.OnDied -= OnEnemyDied;
         }
 
-            
         RoundData data = rounds[currentRoundIndex];
 
         fame += data.fameReward;
         UpdateUI();
 
-        if (fame >= fameGoal || currentRoundIndex >= rounds.Count - 1)
+        if (sfxSource != null && victorySound != null)
+            sfxSource.PlayOneShot(victorySound);
+
+        if (ShouldTriggerFinalVictory())
         {
             StartCoroutine(FinalVictoryRoutine());
         }
@@ -237,20 +272,23 @@ public class RoundManager : MonoBehaviour
         {
             StartCoroutine(NextRoundRoutine(data.fameReward));
         }
+    }
 
-        if (sfxSource != null && victorySound != null)
-            sfxSource.PlayOneShot(victorySound);
+    private bool ShouldTriggerFinalVictory()
+    {
+        bool isLastRound = currentRoundIndex >= rounds.Count - 1;
+        bool fameGoalReached = winWhenFameGoalReached && fame >= fameGoal;
+
+        return isLastRound || fameGoalReached;
     }
 
     private IEnumerator NextRoundRoutine(int fameReward)
     {
-        ShowMessage("¡Ronda superada!\nFama +" + fameReward);
+        ShowMessage("RONDA SUPERADA\nFama +" + fameReward, messageDuration);
 
-        yield return new WaitForSeconds(messageDuration);
+        yield return new WaitForSecondsRealtime(messageDuration + nextRoundDelay);
 
         HideMessage();
-
-        yield return new WaitForSeconds(nextRoundDelay);
 
         currentRoundIndex++;
         StartRound();
@@ -258,7 +296,13 @@ public class RoundManager : MonoBehaviour
 
     private IEnumerator FinalVictoryRoutine()
     {
-        ShowMessage("¡Has alcanzado la fama necesaria!\nEl Lanista te entrega el Rudis.\n¡Eres libre!");
+        if (finalVictoryStarted)
+            yield break;
+
+        finalVictoryStarted = true;
+        roundEnded = true;
+
+        ShowMessage("VICTORIA\nHas sobrevivido a la arena\nHas ganado tu libertad", messageDuration);
 
         if (arenaDoor != null)
             arenaDoor.OpenDoor();
@@ -268,21 +312,19 @@ public class RoundManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        yield return new WaitForSeconds(timeBeforeFade);
+        yield return new WaitForSecondsRealtime(timeBeforeFade);
 
         if (fadeController != null)
             yield return StartCoroutine(fadeController.FadeOut());
 
-        yield return new WaitForSeconds(timeBeforeLoadMenu);
+        yield return new WaitForSecondsRealtime(timeBeforeLoadMenu);
 
-        Time.timeScale = 1f; // MUY IMPORTANTE
-        SceneManager.LoadScene("MainMenu");
+        Time.timeScale = 1f;
 
-    }
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
 
-    private void FinalVictory()
-    {
-        ShowMessage("¡Has ganado tu libertad!");
+        SceneManager.LoadScene(mainMenuSceneName);
     }
 
     private void ResetPlayerToSpawn()
@@ -322,13 +364,27 @@ public class RoundManager : MonoBehaviour
 
     private IEnumerator ShowMessageTimedRoutine(string text)
     {
-        ShowMessage(text);
-        yield return new WaitForSeconds(messageDuration);
-        HideMessage();
+        ShowMessage(text, messageDuration);
+
+        yield return new WaitForSecondsRealtime(messageDuration);
+
+        if (roundMessageUI == null)
+            HideMessage();
     }
 
     private void ShowMessage(string text)
     {
+        ShowMessage(text, messageDuration);
+    }
+
+    private void ShowMessage(string text, float visibleTime)
+    {
+        if (roundMessageUI != null)
+        {
+            roundMessageUI.ShowMessage(text, visibleTime);
+            return;
+        }
+
         if (messageText == null)
             return;
 
@@ -338,10 +394,11 @@ public class RoundManager : MonoBehaviour
 
     private void HideMessage()
     {
-        if (messageText == null)
-            return;
+        if (roundMessageUI != null)
+            roundMessageUI.HideInstant();
 
-        messageText.gameObject.SetActive(false);
+        if (messageText != null)
+            messageText.gameObject.SetActive(false);
     }
 
     private void UpdateUI()
@@ -355,21 +412,29 @@ public class RoundManager : MonoBehaviour
 
     private void DisablePlayerControl()
     {
-        if (player == null) return;
+        if (player == null)
+            return;
 
         PlayerMove move = player.GetComponent<PlayerMove>();
-        if (move != null) move.enabled = false;
+
+        if (move != null)
+            move.enabled = false;
 
         PlayerCombat combat = player.GetComponent<PlayerCombat>();
-        if (combat != null) combat.enabled = false;
+
+        if (combat != null)
+            combat.enabled = false;
 
         PlayerDodge dodge = player.GetComponent<PlayerDodge>();
-        if (dodge != null) dodge.enabled = false;
+
+        if (dodge != null)
+            dodge.enabled = false;
 
         PlayerBlock block = player.GetComponent<PlayerBlock>();
-        if (block != null) block.enabled = false;
+
+        if (block != null)
+            block.enabled = false;
 
         Debug.Log("Jugador desactivado → fin del juego");
     }
-
 }
