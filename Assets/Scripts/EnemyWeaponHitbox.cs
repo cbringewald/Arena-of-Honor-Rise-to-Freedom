@@ -7,8 +7,26 @@ public class EnemyWeaponHitbox : MonoBehaviour
     [SerializeField] private int damage = 1;
     [SerializeField] private Transform ownerRoot;
 
+    [Header("Audio On Successful Hit")]
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip[] hitSounds;
+    [Range(0f, 1f)] [SerializeField] private float hitVolume = 1f;
+    [SerializeField] private float minPitch = 0.95f;
+    [SerializeField] private float maxPitch = 1.05f;
+
     private readonly HashSet<Health> damagedTargets = new HashSet<Health>();
     private bool swingActive;
+
+    public int Damage => damage;
+
+    private void Awake()
+    {
+        if (ownerRoot == null)
+            ownerRoot = transform.root;
+
+        if (audioSource == null)
+            audioSource = GetComponentInParent<AudioSource>();
+    }
 
     public void StartSwing()
     {
@@ -24,6 +42,11 @@ public class EnemyWeaponHitbox : MonoBehaviour
         swingActive = false;
         damagedTargets.Clear();
         Debug.Log("Enemy swing finalizado");
+    }
+
+    public void SetDamage(int newDamage)
+    {
+        damage = Mathf.Max(1, newDamage);
     }
 
     private void OnTriggerEnter(Collider other)
@@ -58,17 +81,30 @@ public class EnemyWeaponHitbox : MonoBehaviour
             bool blocked = defense.TryBlockHit(ownerRoot, ref finalDamage);
 
             if (blocked)
-            {
-                Debug.Log($"Golpe bloqueado por {health.gameObject.name}. Daño final: {finalDamage}");
-            }
+                Debug.Log($"Golpe bloqueado por {health.gameObject.name}. Dano final: {finalDamage}");
         }
 
         if (finalDamage > 0)
         {
             health.TakeDamage(finalDamage, "EnemyWeapon");
-            Debug.Log($"EnemyWeaponHitbox dañó a {health.gameObject.name} por {finalDamage}");
+            PlayHitSound();
+            Debug.Log($"EnemyWeaponHitbox dano a {health.gameObject.name} por {finalDamage}");
         }
 
         damagedTargets.Add(health);
+    }
+
+    private void PlayHitSound()
+    {
+        if (audioSource == null || hitSounds == null || hitSounds.Length == 0)
+            return;
+
+        AudioClip clip = hitSounds[Random.Range(0, hitSounds.Length)];
+
+        if (clip == null)
+            return;
+
+        audioSource.pitch = Random.Range(minPitch, maxPitch);
+        audioSource.PlayOneShot(clip, hitVolume);
     }
 }

@@ -58,4 +58,15 @@ public class EnterArenaTrigger : MonoBehaviour
         if (promptText != null)
             promptText.SetActive(false);
     }
+
+    public void ResetTrigger()
+    {
+        playerCombat = null;
+        playerInside = false;
+
+        if (promptText != null)
+            promptText.SetActive(false);
+
+        gameObject.SetActive(true);
+    }
 }

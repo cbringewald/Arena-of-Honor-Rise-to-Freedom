@@ -17,6 +17,12 @@ public class BotAI : MonoBehaviour
     [Header("Target")]
     [SerializeField] private Transform player;
     [SerializeField] private Health playerHealth;
+    [SerializeField] private PlayerCombat playerCombat;
+    [SerializeField] private bool canTargetPlayer = true;
+    [SerializeField] private bool canTargetEnemies = true;
+    [SerializeField] private bool canTargetOtherBots = false;
+    [SerializeField] private float targetRefreshInterval = 0.35f;
+    [SerializeField] private float targetSwitchDistanceBias = 0.75f;
 
     [Header("Rangos")]
     [SerializeField] private float detectionRange = 12f;
@@ -25,16 +31,25 @@ public class BotAI : MonoBehaviour
 
     [Header("Ataque")]
     [SerializeField] private float attackCooldown = 1.2f;
+    [SerializeField] private Vector2 attackCooldownJitter = new Vector2(0f, 0.35f);
+    [SerializeField] private float attackRangeBuffer = 0.25f;
+    [SerializeField] private float attackFacingAngle = 70f;
+    [SerializeField] private bool lockPositionWhileAttacking = true;
+    [SerializeField] private EnemyAttackComboController attackComboController;
 
     [Header("Velocidades")]
     [SerializeField] private float runSpeed = 3.8f;
-    [SerializeField] private float retreatSpeed = 3.2f;
+    [SerializeField] private float retreatSpeed = 1.9f;
 
-    [Header("Huida")]
-    [SerializeField] private float fleeSpeed = 5.5f;
-    [SerializeField] private float fleeDistance = 8f;
-    [SerializeField] private float fleeDuration = 2.5f;
-    [SerializeField] private float safeDistance = 7f;
+    [Header("Control de distancia")]
+    [SerializeField] private float forwardStepSpeed = 2.1f;
+    [SerializeField] private float forwardStepDistance = 2.6f;
+    [SerializeField] private float maxBackpedalDistanceFromPlayer = 2.35f;
+    [SerializeField, HideInInspector] private float fleeSpeed = 5.5f;
+    [SerializeField, HideInInspector] private float fleeDistance = 8f;
+    [SerializeField, HideInInspector] private float fleeDuration = 2.5f;
+    [SerializeField, HideInInspector] private float safeDistance = 7f;
+    [SerializeField, HideInInspector] private float fleeRetryCooldown = 3f;
 
     [Header("Hit Reaction")]
     [SerializeField] private float hitReactionDuration = 0.45f;
@@ -42,9 +57,13 @@ public class BotAI : MonoBehaviour
 
     [Header("Combat Decisions")]
     [SerializeField] private float defendDuration = 0.8f;
-    [SerializeField] private float retreatDuration = 1.0f;
-    [SerializeField] private float retreatDistance = 3f;
+    [SerializeField] private float retreatDuration = 0.55f;
+    [SerializeField] private float retreatDistance = 1.15f;
+    [SerializeField] private float retreatRecoveryTime = 0.45f;
+    [SerializeField] private float postAttackRecoveryTime = 0.45f;
     [SerializeField] private float decisionCooldown = 0.4f;
+    [SerializeField] private float minSpacingDistance = 1.15f;
+    [SerializeField] private float lowHealthKeepAwayDistance = 2.1f;
 
     [Header("Probabilidades con vida alta")]
     [Range(0f, 1f)] [SerializeField] private float attackChanceHighHealth = 0.65f;
@@ -53,13 +72,18 @@ public class BotAI : MonoBehaviour
     [Header("Probabilidades con vida baja")]
     [Range(0f, 1f)] [SerializeField] private float attackChanceLowHealth = 0.35f;
     [Range(0f, 1f)] [SerializeField] private float defendChanceLowHealth = 0.30f;
+    [Range(0f, 1f)] [SerializeField] private float lowHealthRetreatChance = 0.55f;
 
     [Header("Vida baja")]
     [Range(0f, 1f)] [SerializeField] private float lowHealthThreshold = 0.4f;
 
-    [Header("Huida con vida crítica")]
-    [Range(0f, 1f)] [SerializeField] private float fleeHealthThreshold = 0.25f;
-    [Range(0f, 1f)] [SerializeField] private float fleeChanceLowHealth = 0.65f;
+    [Header("Reaccion al ataque del jugador")]
+    [SerializeField] private float playerAttackThreatRange = 2.4f;
+    [SerializeField] private float playerAttackFacingAngle = 115f;
+    [SerializeField] private float playerAttackReactionCooldown = 0.65f;
+    [Range(0f, 1f)] [SerializeField] private float blockPlayerAttackChance = 0.45f;
+    [Range(0f, 1f)] [SerializeField] private float backpedalPlayerAttackChance = 0.45f;
+    [Range(0f, 1f)] [SerializeField] private float lowHealthBackpedalPlayerAttackChance = 0.75f;
 
     [Header("Referencias")]
     [SerializeField] private Animator animator;
@@ -75,17 +99,27 @@ public class BotAI : MonoBehaviour
 
     [Header("NavMesh Fix")]
     [SerializeField] private float snapToNavMeshDistance = 2f;
+    [SerializeField] private float repathInterval = 0.15f;
+    [SerializeField] private float destinationUpdateDistance = 0.35f;
 
     private NavMeshAgent agent;
 
     private float nextAttackTime;
     private float stateEndTime;
     private float nextDecisionTime;
+    private float nextFleeTime;
+    private float nextRepathTime;
+    private float nextPlayerAttackReactionTime;
+    private float postAttackRecoveryEndTime;
+    private float nextTargetRefreshTime;
 
     private bool isChasing;
     private bool isAttacking;
     private bool isHitReacting;
     private bool ignoreHitReactionDuringCommit;
+    private bool wantsDefensiveActionAfterHit;
+    private bool hasAttackLockPosition;
+    private bool hasPostAttackLockPosition;
 
     private float hitReactEndTime;
 
@@ -100,7 +134,13 @@ public class BotAI : MonoBehaviour
 
     private Vector3 retreatTarget;
     private Vector3 fleeTarget;
+    private Vector3 attackLockPosition;
+    private Vector3 postAttackLockPosition;
+    private Vector3 lastChaseDestination;
     private Vector3 lastKnownPlayerDir = Vector3.forward;
+    private Transform currentTarget;
+    private Health currentTargetHealth;
+    private PlayerCombat currentTargetCombat;
 
     public EnemyState CurrentState => currentState;
 
@@ -117,8 +157,25 @@ public class BotAI : MonoBehaviour
         if (health == null)
             health = GetComponent<Health>();
 
+        if (attackComboController == null)
+            attackComboController = GetComponent<EnemyAttackComboController>();
+
+        if (attackComboController == null)
+            attackComboController = GetComponentInChildren<EnemyAttackComboController>();
+
         if (player != null && playerHealth == null)
-            playerHealth = player.GetComponent<Health>();
+        {
+            playerHealth = player.GetComponent<Health>() ??
+                player.GetComponentInParent<Health>() ??
+                player.GetComponentInChildren<Health>();
+        }
+
+        if (player != null && playerCombat == null)
+        {
+            playerCombat = player.GetComponent<PlayerCombat>() ??
+                player.GetComponentInParent<PlayerCombat>() ??
+                player.GetComponentInChildren<PlayerCombat>();
+        }
 
         walkHash = Animator.StringToHash(walkParameter);
         runHash = Animator.StringToHash(runParameter);
@@ -157,16 +214,9 @@ public class BotAI : MonoBehaviour
             return;
         }
 
-        if (player == null)
-        {
-            StopCombatCompletely();
-            return;
-        }
+        ResolveTarget();
 
-        if (playerHealth == null)
-            playerHealth = player.GetComponent<Health>();
-
-        if (playerHealth != null && playerHealth.IsDead)
+        if (currentTarget == null || currentTargetHealth == null || currentTargetHealth.IsDead)
         {
             StopCombatCompletely();
             return;
@@ -189,12 +239,20 @@ public class BotAI : MonoBehaviour
             SetBackpedalAnimation(false);
 
             if (Time.time >= hitReactEndTime)
+            {
                 isHitReacting = false;
+
+                if (wantsDefensiveActionAfterHit)
+                {
+                    wantsDefensiveActionAfterHit = false;
+                    StartRetreat();
+                }
+            }
 
             return;
         }
 
-        float dist = Vector3.Distance(transform.position, player.position);
+        float dist = Vector3.Distance(transform.position, currentTarget.position);
 
         if (!isChasing && dist <= detectionRange)
             isChasing = true;
@@ -210,6 +268,15 @@ public class BotAI : MonoBehaviour
         }
 
         UpdateLastKnownDirection();
+
+        if (IsPostAttackRecovering())
+        {
+            HandlePostAttackRecovery();
+            return;
+        }
+
+        if (TryReactToPlayerAttack(dist))
+            return;
 
         switch (currentState)
         {
@@ -240,9 +307,15 @@ public class BotAI : MonoBehaviour
                 break;
 
             case EnemyState.Fleeing:
-                HandleFleeing(dist);
+                StartRetreat();
                 break;
         }
+    }
+
+    private void LateUpdate()
+    {
+        LockAttackPosition();
+        LockPostAttackPosition();
     }
 
     private void StopCombatCompletely()
@@ -251,6 +324,9 @@ public class BotAI : MonoBehaviour
         isAttacking = false;
         isHitReacting = false;
         ignoreHitReactionDuringCommit = false;
+        wantsDefensiveActionAfterHit = false;
+        hasAttackLockPosition = false;
+        hasPostAttackLockPosition = false;
 
         StopAgent();
 
@@ -281,9 +357,143 @@ public class BotAI : MonoBehaviour
         }
     }
 
+    private void ResolveTarget()
+    {
+        ResolvePlayerReference();
+
+        if (Time.time < nextTargetRefreshTime && IsCurrentTargetValid(loseRange))
+            return;
+
+        nextTargetRefreshTime = Time.time + targetRefreshInterval;
+
+        Health bestTarget = FindBestTarget();
+
+        if (bestTarget != null)
+        {
+            SetCurrentTarget(bestTarget);
+            isChasing = true;
+            return;
+        }
+
+        if (!IsCurrentTargetValid(loseRange))
+            SetCurrentTarget(null);
+    }
+
+    private void ResolvePlayerReference()
+    {
+        if (player == null)
+            return;
+
+        if (playerHealth == null)
+        {
+            playerHealth = player.GetComponent<Health>() ??
+                player.GetComponentInParent<Health>() ??
+                player.GetComponentInChildren<Health>();
+        }
+
+        if (playerCombat == null)
+        {
+            playerCombat = player.GetComponent<PlayerCombat>() ??
+                player.GetComponentInParent<PlayerCombat>() ??
+                player.GetComponentInChildren<PlayerCombat>();
+        }
+    }
+
+    private Health FindBestTarget()
+    {
+        Health[] candidates = FindObjectsByType<Health>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        Health bestTarget = null;
+        float bestDistance = float.MaxValue;
+        float maxDistance = isChasing ? loseRange : detectionRange;
+        float maxDistanceSqr = maxDistance * maxDistance;
+        float currentDistance = IsCurrentTargetValid(loseRange)
+            ? Vector3.Distance(transform.position, currentTarget.position)
+            : float.MaxValue;
+
+        foreach (Health candidate in candidates)
+        {
+            if (!IsValidTargetHealth(candidate))
+                continue;
+
+            float sqrDistance = (candidate.transform.position - transform.position).sqrMagnitude;
+
+            if (sqrDistance > maxDistanceSqr)
+                continue;
+
+            float distance = Mathf.Sqrt(sqrDistance);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestTarget = candidate;
+            }
+        }
+
+        if (bestTarget == null)
+            return null;
+
+        if (currentTargetHealth != null && bestTarget != currentTargetHealth &&
+            currentDistance <= bestDistance + targetSwitchDistanceBias)
+            return currentTargetHealth;
+
+        return bestTarget;
+    }
+
+    private bool IsCurrentTargetValid(float maxDistance)
+    {
+        if (!IsValidTargetHealth(currentTargetHealth) || currentTarget == null)
+            return false;
+
+        return Vector3.Distance(transform.position, currentTarget.position) <= maxDistance;
+    }
+
+    private bool IsValidTargetHealth(Health targetHealth)
+    {
+        if (targetHealth == null || targetHealth.IsDead || targetHealth == health)
+            return false;
+
+        if (targetHealth.transform.root == transform.root)
+            return false;
+
+        bool isPlayer = IsPlayerTarget(targetHealth);
+
+        if (isPlayer)
+            return canTargetPlayer;
+
+        BotAI targetBot = targetHealth.GetComponent<BotAI>() ??
+            targetHealth.GetComponentInChildren<BotAI>() ??
+            targetHealth.GetComponentInParent<BotAI>();
+
+        if (targetBot != null && !canTargetOtherBots)
+            return false;
+
+        return canTargetEnemies;
+    }
+
+    private bool IsPlayerTarget(Health targetHealth)
+    {
+        if (targetHealth == null)
+            return false;
+
+        if (playerHealth != null && targetHealth == playerHealth)
+            return true;
+
+        return player != null && targetHealth.transform.root == player.root;
+    }
+
+    private void SetCurrentTarget(Health targetHealth)
+    {
+        currentTargetHealth = targetHealth;
+        currentTarget = targetHealth != null ? targetHealth.transform : null;
+        currentTargetCombat = targetHealth != null ? targetHealth.GetComponent<PlayerCombat>() : null;
+
+        if (currentTargetCombat == null && targetHealth != null)
+            currentTargetCombat = targetHealth.GetComponentInParent<PlayerCombat>() ?? targetHealth.GetComponentInChildren<PlayerCombat>();
+    }
+
     private void UpdateLastKnownDirection()
     {
-        Vector3 dir = player.position - transform.position;
+        Vector3 dir = currentTarget.position - transform.position;
         dir.y = 0f;
 
         if (dir.sqrMagnitude > 0.01f)
@@ -318,6 +528,9 @@ public class BotAI : MonoBehaviour
 
     private void HandleChase()
     {
+        if (IsPostAttackRecovering())
+            return;
+
         if (isAttacking || isHitReacting)
             return;
 
@@ -329,15 +542,28 @@ public class BotAI : MonoBehaviour
         SetBlockAnimation(false);
         SetBackpedalAnimation(false);
 
+        float dist = currentTarget != null ? Vector3.Distance(transform.position, currentTarget.position) : Mathf.Infinity;
+
+        bool closeForwardStep = dist <= forwardStepDistance;
+
         agent.isStopped = false;
-        agent.speed = runSpeed;
+        agent.speed = closeForwardStep ? forwardStepSpeed : runSpeed;
         agent.stoppingDistance = Mathf.Max(attackRange - 0.15f, 0.5f);
-        agent.SetDestination(player.position);
+
+        bool shouldUpdateDestination = Time.time >= nextRepathTime ||
+            (currentTarget.position - lastChaseDestination).sqrMagnitude >= destinationUpdateDistance * destinationUpdateDistance;
+
+        if (shouldUpdateDestination)
+        {
+            nextRepathTime = Time.time + repathInterval;
+            lastChaseDestination = currentTarget.position;
+            agent.SetDestination(lastChaseDestination);
+        }
 
         bool moving = agent.velocity.magnitude > 0.1f;
 
-        SetMovementAnimation(false, moving);
-        FaceMovementDirection();
+        SetMovementAnimation(moving && closeForwardStep, moving && !closeForwardStep);
+        FacePlayer();
     }
 
     private void HandleAttack()
@@ -350,16 +576,46 @@ public class BotAI : MonoBehaviour
         SetBlockAnimation(false);
         SetBackpedalAnimation(false);
 
+        LockAttackPosition();
+
         FacePlayer();
+        LockAttackPosition();
+
+        float dist = Vector3.Distance(transform.position, currentTarget.position);
+
+        if (!isAttacking && dist > attackRange + attackRangeBuffer)
+        {
+            isAttacking = false;
+            hasAttackLockPosition = false;
+            SetState(EnemyState.Chasing);
+            return;
+        }
+
+        if (!isAttacking && ShouldKeepDistance(dist))
+        {
+            StartRetreat();
+            return;
+        }
+
+        if (!IsFacingPlayer(attackFacingAngle))
+            return;
 
         if (Time.time >= nextAttackTime && !isAttacking)
         {
             isAttacking = true;
+            CaptureAttackLockPosition();
+
+            float cooldownMultiplier = attackComboController != null
+                ? attackComboController.SelectAttack(dist)
+                : 1f;
 
             animator.ResetTrigger(attackHash);
             animator.SetTrigger(attackHash);
 
-            nextAttackTime = Time.time + attackCooldown;
+            float minJitter = Mathf.Min(attackCooldownJitter.x, attackCooldownJitter.y);
+            float maxJitter = Mathf.Max(attackCooldownJitter.x, attackCooldownJitter.y);
+            float cooldownJitter = Random.Range(minJitter, maxJitter);
+            nextAttackTime = Time.time + (attackCooldown * cooldownMultiplier) + Mathf.Max(0f, cooldownJitter);
         }
     }
 
@@ -413,27 +669,27 @@ public class BotAI : MonoBehaviour
         {
             SetBackpedalAnimation(false);
 
-            if (dist <= attackRange)
-                DecideCloseCombatAction();
+            if (IsLowHealth() && dist <= lowHealthKeepAwayDistance)
+            {
+                SetState(EnemyState.Defending);
+                stateEndTime = Time.time + retreatRecoveryTime;
+            }
+            else if (dist <= attackRange)
+            {
+                SetState(EnemyState.Defending);
+                stateEndTime = Time.time + retreatRecoveryTime;
+            }
             else
+            {
                 SetState(EnemyState.Chasing);
+            }
         }
     }
 
     private void HandleFleeing(float dist)
     {
-        SetState(EnemyState.Fleeing);
-
-        SetBlockAnimation(false);
-        SetBackpedalAnimation(false);
-
-        if (!agent.enabled || !agent.isOnNavMesh)
-            return;
-
-        agent.isStopped = false;
-        agent.speed = fleeSpeed;
-        agent.stoppingDistance = 0f;
-        agent.SetDestination(fleeTarget);
+        StartRetreat();
+        return;
 
         bool moving = agent.velocity.magnitude > 0.1f;
 
@@ -466,22 +722,36 @@ public class BotAI : MonoBehaviour
 
         nextDecisionTime = Time.time + decisionCooldown;
 
-        if (ShouldTryToFlee())
+        float dist = currentTarget != null ? Vector3.Distance(transform.position, currentTarget.position) : Mathf.Infinity;
+
+        if (ShouldKeepDistance(dist))
         {
-            StartFlee();
+            StartRetreat();
+            return;
+        }
+
+        if (IsLowHealth() && dist <= lowHealthKeepAwayDistance && Random.value < lowHealthRetreatChance)
+        {
+            StartRetreat();
             return;
         }
 
         float attackChance = IsLowHealth() ? attackChanceLowHealth : attackChanceHighHealth;
         float defendChance = IsLowHealth() ? defendChanceLowHealth : defendChanceHighHealth;
+        float retreatChance = IsLowHealth() ? lowHealthRetreatChance : 0f;
 
-        float roll = Random.value;
+        float totalChance = Mathf.Max(attackChance + defendChance + retreatChance, 0.001f);
+        float roll = Random.value * totalChance;
 
-        if (roll < attackChance)
+        if (roll < retreatChance)
+        {
+            StartRetreat();
+        }
+        else if (roll < retreatChance + attackChance)
         {
             SetState(EnemyState.Attacking);
         }
-        else if (roll < attackChance + defendChance)
+        else if (roll < retreatChance + attackChance + defendChance)
         {
             SetState(EnemyState.Defending);
             stateEndTime = Time.time + defendDuration;
@@ -492,28 +762,75 @@ public class BotAI : MonoBehaviour
         }
     }
 
-    private bool ShouldTryToFlee()
+    private bool TryReactToPlayerAttack(float dist)
     {
-        if (health == null)
+        if (currentTargetCombat == null || !currentTargetCombat.IsAttacking)
             return false;
 
-        if (health.NormalizedHealth > fleeHealthThreshold)
+        if (Time.time < nextPlayerAttackReactionTime)
             return false;
 
-        return Random.value < fleeChanceLowHealth;
+        if (isAttacking || isHitReacting || currentState == EnemyState.Fleeing)
+            return false;
+
+        if (dist > playerAttackThreatRange)
+            return false;
+
+        if (!IsPlayerFacingEnemy(playerAttackFacingAngle))
+            return false;
+
+        nextPlayerAttackReactionTime = Time.time + playerAttackReactionCooldown;
+
+        float backpedalChance = IsLowHealth() ? lowHealthBackpedalPlayerAttackChance : backpedalPlayerAttackChance;
+        float roll = Random.value;
+
+        if (roll < backpedalChance)
+        {
+            StartRetreat();
+            return true;
+        }
+
+        if (roll < backpedalChance + blockPlayerAttackChance)
+        {
+            SetState(EnemyState.Defending);
+            stateEndTime = Time.time + defendDuration;
+            return true;
+        }
+
+        SetState(EnemyState.Attacking);
+        return true;
+    }
+
+    private bool ShouldKeepDistance(float dist)
+    {
+        return dist <= minSpacingDistance;
     }
 
     private void StartRetreat()
     {
-        if (player == null)
+        if (currentTarget == null)
             return;
+
+        float currentDistance = Vector3.Distance(transform.position, currentTarget.position);
+
+        if (currentDistance >= maxBackpedalDistanceFromPlayer)
+        {
+            StopAgent();
+            hasPostAttackLockPosition = false;
+            postAttackRecoveryEndTime = 0f;
+            SetState(EnemyState.Defending);
+            stateEndTime = Time.time + retreatRecoveryTime;
+            return;
+        }
 
         SetState(EnemyState.Retreating);
 
         isAttacking = false;
+        hasPostAttackLockPosition = false;
+        postAttackRecoveryEndTime = 0f;
         stateEndTime = Time.time + retreatDuration;
 
-        Vector3 awayDir = transform.position - player.position;
+        Vector3 awayDir = transform.position - currentTarget.position;
         awayDir.y = 0f;
 
         if (awayDir.sqrMagnitude < 0.001f)
@@ -521,38 +838,23 @@ public class BotAI : MonoBehaviour
 
         awayDir.Normalize();
 
-        retreatTarget = transform.position + awayDir * retreatDistance;
+        float remainingRoom = Mathf.Max(0.25f, maxBackpedalDistanceFromPlayer - currentDistance);
+        float stepDistance = Mathf.Min(retreatDistance, remainingRoom);
+
+        if (currentDistance > minSpacingDistance)
+            stepDistance *= 0.7f;
+
+        retreatTarget = transform.position + awayDir * stepDistance;
 
         NavMeshHit hit;
 
-        if (NavMesh.SamplePosition(retreatTarget, out hit, retreatDistance + 2f, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(retreatTarget, out hit, stepDistance + 0.75f, NavMesh.AllAreas))
             retreatTarget = hit.position;
     }
 
     private void StartFlee()
     {
-        if (player == null)
-            return;
-
-        SetState(EnemyState.Fleeing);
-
-        isAttacking = false;
-        stateEndTime = Time.time + fleeDuration;
-
-        Vector3 awayDir = transform.position - player.position;
-        awayDir.y = 0f;
-
-        if (awayDir.sqrMagnitude < 0.001f)
-            awayDir = -transform.forward;
-
-        awayDir.Normalize();
-
-        fleeTarget = transform.position + awayDir * fleeDistance;
-
-        NavMeshHit hit;
-
-        if (NavMesh.SamplePosition(fleeTarget, out hit, fleeDistance + 3f, NavMesh.AllAreas))
-            fleeTarget = hit.position;
+        StartRetreat();
     }
 
     private bool IsLowHealth()
@@ -575,6 +877,39 @@ public class BotAI : MonoBehaviour
         }
     }
 
+    private bool IsFacingPlayer(float maxAngle)
+    {
+        Vector3 dir = lastKnownPlayerDir;
+        dir.y = 0f;
+
+        if (dir.sqrMagnitude < 0.001f)
+            return true;
+
+        float angle = Vector3.Angle(transform.forward, dir.normalized);
+        return angle <= maxAngle;
+    }
+
+    private bool IsPlayerFacingEnemy(float maxAngle)
+    {
+        if (player == null)
+            return false;
+
+        Vector3 dirToEnemy = transform.position - player.position;
+        dirToEnemy.y = 0f;
+
+        if (dirToEnemy.sqrMagnitude < 0.001f)
+            return true;
+
+        Vector3 playerForward = player.forward;
+        playerForward.y = 0f;
+
+        if (playerForward.sqrMagnitude < 0.001f)
+            return true;
+
+        float angle = Vector3.Angle(playerForward.normalized, dirToEnemy.normalized);
+        return angle <= maxAngle * 0.5f;
+    }
+
     private void FaceMovementDirection()
     {
         if (agent == null)
@@ -590,12 +925,96 @@ public class BotAI : MonoBehaviour
         }
     }
 
+    private bool IsPostAttackRecovering()
+    {
+        return Time.time < postAttackRecoveryEndTime;
+    }
+
+    private void BeginPostAttackRecovery()
+    {
+        postAttackRecoveryEndTime = Time.time + postAttackRecoveryTime;
+        postAttackLockPosition = transform.position;
+        hasPostAttackLockPosition = true;
+
+        StopAgent();
+        SetMovementAnimation(false, false);
+        SetBlockAnimation(false);
+        SetBackpedalAnimation(false);
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+            agent.Warp(postAttackLockPosition);
+    }
+
+    private void HandlePostAttackRecovery()
+    {
+        StopAgent();
+        SetMovementAnimation(false, false);
+        SetBlockAnimation(false);
+        SetBackpedalAnimation(false);
+        FacePlayer();
+        LockPostAttackPosition();
+    }
+
     private void StopAgent()
     {
         if (agent != null && agent.enabled && agent.isOnNavMesh)
         {
             agent.isStopped = true;
             agent.ResetPath();
+            agent.velocity = Vector3.zero;
+        }
+    }
+
+    private void CaptureAttackLockPosition()
+    {
+        if (!lockPositionWhileAttacking)
+            return;
+
+        attackLockPosition = transform.position;
+        hasAttackLockPosition = true;
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+            agent.Warp(attackLockPosition);
+    }
+
+    private void LockAttackPosition()
+    {
+        if (!lockPositionWhileAttacking || !isAttacking)
+            return;
+
+        if (!hasAttackLockPosition)
+            CaptureAttackLockPosition();
+
+        Quaternion currentRotation = transform.rotation;
+        transform.position = attackLockPosition;
+        transform.rotation = currentRotation;
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.nextPosition = attackLockPosition;
+            agent.velocity = Vector3.zero;
+        }
+    }
+
+    private void LockPostAttackPosition()
+    {
+        if (!lockPositionWhileAttacking || !hasPostAttackLockPosition)
+            return;
+
+        if (!IsPostAttackRecovering())
+        {
+            hasPostAttackLockPosition = false;
+            return;
+        }
+
+        Quaternion currentRotation = transform.rotation;
+        transform.position = postAttackLockPosition;
+        transform.rotation = currentRotation;
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.nextPosition = postAttackLockPosition;
+            agent.velocity = Vector3.zero;
         }
     }
 
@@ -634,9 +1053,16 @@ public class BotAI : MonoBehaviour
 
         isHitReacting = true;
         hitReactEndTime = Time.time + hitReactionDuration;
+        wantsDefensiveActionAfterHit = IsLowHealth() || Random.value < 0.35f;
 
         if (cancelAttackOnHit)
+        {
             isAttacking = false;
+            hasAttackLockPosition = false;
+        }
+
+        hasPostAttackLockPosition = false;
+        postAttackRecoveryEndTime = 0f;
 
         StopAgent();
 
@@ -656,19 +1082,16 @@ public class BotAI : MonoBehaviour
     {
         isAttacking = false;
         ignoreHitReactionDuringCommit = false;
+        hasAttackLockPosition = false;
 
-        if (player == null || (playerHealth != null && playerHealth.IsDead))
+        if (currentTarget == null || (currentTargetHealth != null && currentTargetHealth.IsDead))
         {
             StopCombatCompletely();
             return;
         }
 
-        float dist = Vector3.Distance(transform.position, player.position);
-
-        if (dist <= attackRange)
-            DecideCloseCombatAction();
-        else
-            SetState(EnemyState.Chasing);
+        BeginPostAttackRecovery();
+        SetState(EnemyState.Chasing);
     }
 
     public void BeginAttackCommit()
@@ -689,11 +1112,27 @@ public class BotAI : MonoBehaviour
     public void IsAttacking()
     {
         isAttacking = true;
+        CaptureAttackLockPosition();
     }
 
     public void SetPlayer(Transform newPlayer)
     {
         player = newPlayer;
-        playerHealth = newPlayer != null ? newPlayer.GetComponent<Health>() : null;
+        playerHealth = null;
+        playerCombat = null;
+
+        if (newPlayer != null)
+        {
+            playerHealth = newPlayer.GetComponent<Health>() ??
+                newPlayer.GetComponentInParent<Health>() ??
+                newPlayer.GetComponentInChildren<Health>();
+
+            playerCombat = newPlayer.GetComponent<PlayerCombat>() ??
+                newPlayer.GetComponentInParent<PlayerCombat>() ??
+                newPlayer.GetComponentInChildren<PlayerCombat>();
+        }
+
+        if (currentTarget == null && playerHealth != null && !playerHealth.IsDead)
+            SetCurrentTarget(playerHealth);
     }
 }

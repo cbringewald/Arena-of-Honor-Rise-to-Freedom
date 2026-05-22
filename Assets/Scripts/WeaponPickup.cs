@@ -14,6 +14,10 @@ public class WeaponPickup : MonoBehaviour
     [Header("Door")]
     [SerializeField] private PortonArena arenaDoor;
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource sfxSource;
+    [SerializeField] private AudioClip pickupSound;
+
     private PlayerCombat playerCombat;
     private bool playerInside;
     private bool picked;
@@ -33,7 +37,16 @@ public class WeaponPickup : MonoBehaviour
         {
             Debug.Log("Recogiendo arma: " + weaponStyle);
 
-            playerCombat.EquipWeapon(weaponStyle, weaponInHandObject);
+            if (weaponInHandObject == null)
+            {
+                Debug.LogError("WeaponPickup: falta weaponInHandObject en " + gameObject.name);
+                return;
+            }
+            
+            playerCombat.EquipWeapon(weaponStyle, weaponInHandObject, this);
+
+            if (sfxSource != null && pickupSound != null)
+                sfxSource.PlayOneShot(pickupSound);
 
             if (promptText != null)
                 promptText.SetActive(false);
@@ -73,6 +86,46 @@ public class WeaponPickup : MonoBehaviour
 
         playerInside = false;
         playerCombat = null;
+
+        if (promptText != null)
+            promptText.SetActive(false);
+    }
+
+    public void ResetPickup()
+    {
+        picked = false;
+        playerInside = false;
+        playerCombat = null;
+
+        if (promptText != null)
+            promptText.SetActive(false);
+
+        if (weaponWorldObject != null)
+            weaponWorldObject.SetActive(true);
+
+    }
+
+    public void DropFromPlayer(Transform playerTransform)
+    {
+        picked = false;
+        playerInside = false;
+        playerCombat = null;
+
+        if (weaponInHandObject != null)
+            weaponInHandObject.SetActive(false);
+
+        if (weaponWorldObject != null)
+        {
+            weaponWorldObject.SetActive(true);
+
+            if (playerTransform != null)
+            {
+                Vector3 dropPosition = playerTransform.position + playerTransform.forward * 1.2f;
+                dropPosition.y += 0.2f;
+                transform.position = dropPosition;
+                transform.rotation = Quaternion.LookRotation(playerTransform.forward, Vector3.up);
+            }
+        }
 
         if (promptText != null)
             promptText.SetActive(false);

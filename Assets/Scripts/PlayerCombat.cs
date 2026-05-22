@@ -13,12 +13,16 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private Health health;
 
     [Header("Attack Settings")]
-    [SerializeField] private float weaponAttackCost = 20f;
-    [SerializeField] private float unarmedAttackCost = 10f;
+    [SerializeField] private float weaponAttackCost = 14f;
+    [SerializeField] private float unarmedAttackCost = 8f;
     [SerializeField] private WeaponStyle currentWeaponStyle = WeaponStyle.Unarmed;
 
     [Header("Weapon Visuals")]
     [SerializeField] private GameObject currentWeaponObject;
+
+    [Header("Drop Weapon")]
+    [SerializeField] private bool canDropWeapon = true;
+    [SerializeField] private Key dropWeaponKey = Key.E;
 
     [Header("Animator Parameters")]
     [SerializeField] private string walkParameter = "Walk";
@@ -32,6 +36,8 @@ public class PlayerCombat : MonoBehaviour
     private int weaponStyleHash;
 
     private bool isAttacking;
+    private WeaponPickup currentWeaponPickup;
+    private bool suppressDropUntilKeyReleased;
 
     public bool IsAttacking => isAttacking;
     public WeaponStyle CurrentWeaponStyle => currentWeaponStyle;
@@ -95,6 +101,8 @@ public class PlayerCombat : MonoBehaviour
 
         if (Mouse.current.leftButton.wasPressedThisFrame)
             TryAttack();
+
+        HandleDropInput();
     }
 
     public void TryAttack()
@@ -132,6 +140,11 @@ public class PlayerCombat : MonoBehaviour
 
     public void EquipWeapon(WeaponStyle newStyle, GameObject newWeaponObject)
     {
+        EquipWeapon(newStyle, newWeaponObject, null);
+    }
+
+    public void EquipWeapon(WeaponStyle newStyle, GameObject newWeaponObject, WeaponPickup sourcePickup)
+    {
         if (newWeaponObject == null)
         {
             Debug.LogError("EquipWeapon: newWeaponObject está vacío.");
@@ -165,6 +178,8 @@ public class PlayerCombat : MonoBehaviour
 
         currentWeaponStyle = newStyle;
         currentWeaponObject = newWeaponObject;
+        currentWeaponPickup = sourcePickup;
+        suppressDropUntilKeyReleased = Keyboard.current != null && Keyboard.current[dropWeaponKey].isPressed;
         currentWeaponObject.SetActive(true);
 
         weaponHitbox = currentWeaponObject.GetComponentInChildren<WeaponHitbox>(true);
@@ -191,11 +206,38 @@ public class PlayerCombat : MonoBehaviour
 
         currentWeaponObject = null;
         weaponHitbox = null;
+        currentWeaponPickup = null;
         currentWeaponStyle = WeaponStyle.Unarmed;
 
         UpdateAnimatorWeaponStyle();
 
         Debug.Log("Sin arma equipada.");
+    }
+
+    public void DropCurrentWeapon()
+    {
+        if (!canDropWeapon)
+            return;
+
+        if (IsUnarmed || currentWeaponObject == null)
+            return;
+
+        if (isAttacking)
+            return;
+
+        if (currentWeaponPickup != null)
+            currentWeaponPickup.DropFromPlayer(transform);
+        else
+            currentWeaponObject.SetActive(false);
+
+        currentWeaponObject = null;
+        weaponHitbox = null;
+        currentWeaponPickup = null;
+        currentWeaponStyle = WeaponStyle.Unarmed;
+
+        UpdateAnimatorWeaponStyle();
+
+        Debug.Log("Arma soltada.");
     }
 
     private void UpdateAnimatorWeaponStyle()
@@ -246,5 +288,22 @@ public class PlayerCombat : MonoBehaviour
 
         if (weaponHitbox != null)
             weaponHitbox.EndSwing();
+    }
+
+    private void HandleDropInput()
+    {
+        if (!canDropWeapon || Keyboard.current == null)
+            return;
+
+        if (suppressDropUntilKeyReleased)
+        {
+            if (!Keyboard.current[dropWeaponKey].isPressed)
+                suppressDropUntilKeyReleased = false;
+
+            return;
+        }
+
+        if (Keyboard.current[dropWeaponKey].wasPressedThisFrame)
+            DropCurrentWeapon();
     }
 }

@@ -17,12 +17,10 @@ public class PlayerDodge : MonoBehaviour
     [SerializeField] private Stamina stamina;
     [SerializeField] private CharacterController characterController;
     [SerializeField] private Health health;
-    [SerializeField] private Transform cameraTransform;
 
     [Header("Dodge Settings")]
-    [SerializeField] private float dodgeCost = 25f;
-    [SerializeField] private float dodgeDistance = 3f;
-    [SerializeField] private float dodgeDuration = 0.25f;
+    [SerializeField] private float dodgeCost = 18f;
+    [SerializeField] private float dodgeDuration = 0.45f;
     [SerializeField] private Key dodgeKey = Key.Q;
 
     [Header("I-Frames")]
@@ -55,9 +53,6 @@ public class PlayerDodge : MonoBehaviour
 
         if (health == null)
             health = GetComponent<Health>();
-
-        if (cameraTransform == null && Camera.main != null)
-            cameraTransform = Camera.main.transform;
 
         playerCombat = GetComponent<PlayerCombat>();
         playerBlock = GetComponent<PlayerBlock>();
@@ -99,15 +94,13 @@ public class PlayerDodge : MonoBehaviour
             return;
         }
 
-        Vector3 dodgeMoveDirection = GetDodgeMoveDirection(out DodgeDirection animationDirection);
+        DodgeDirection animationDirection = GetDodgeAnimationDirection();
 
-        StartCoroutine(DodgeRoutine(dodgeMoveDirection, animationDirection));
+        StartCoroutine(DodgeRoutine(animationDirection));
     }
 
-    private Vector3 GetDodgeMoveDirection(out DodgeDirection animationDirection)
+    private DodgeDirection GetDodgeAnimationDirection()
     {
-        animationDirection = DodgeDirection.Forward;
-
         Vector2 input = Vector2.zero;
 
         if (Keyboard.current != null)
@@ -119,51 +112,15 @@ public class PlayerDodge : MonoBehaviour
         }
 
         if (input.sqrMagnitude < 0.01f)
-        {
-            animationDirection = DodgeDirection.Forward;
-            return transform.forward;
-        }
-
-        input = Vector2.ClampMagnitude(input, 1f);
+            return DodgeDirection.Forward;
 
         if (Mathf.Abs(input.x) > Mathf.Abs(input.y))
-        {
-            animationDirection = input.x > 0f ? DodgeDirection.Right : DodgeDirection.Left;
-        }
-        else
-        {
-            animationDirection = input.y > 0f ? DodgeDirection.Forward : DodgeDirection.Backward;
-        }
+            return input.x > 0f ? DodgeDirection.Right : DodgeDirection.Left;
 
-        Vector3 forward;
-        Vector3 right;
-
-        if (cameraTransform != null)
-        {
-            forward = cameraTransform.forward;
-            right = cameraTransform.right;
-        }
-        else
-        {
-            forward = transform.forward;
-            right = transform.right;
-        }
-
-        forward.y = 0f;
-        right.y = 0f;
-
-        forward.Normalize();
-        right.Normalize();
-
-        Vector3 direction = forward * input.y + right * input.x;
-
-        if (direction.sqrMagnitude < 0.01f)
-            direction = transform.forward;
-
-        return direction.normalized;
+        return input.y > 0f ? DodgeDirection.Forward : DodgeDirection.Backward;
     }
 
-    private IEnumerator DodgeRoutine(Vector3 direction, DodgeDirection animationDirection)
+    private IEnumerator DodgeRoutine(DodgeDirection animationDirection)
     {
         IsDodging = true;
 
@@ -179,20 +136,7 @@ public class PlayerDodge : MonoBehaviour
             animator.SetTrigger(dodgeTriggerHash);
         }
 
-        float elapsed = 0f;
-        float speed = dodgeDistance / dodgeDuration;
-
-        while (elapsed < dodgeDuration)
-        {
-            elapsed += Time.deltaTime;
-
-            if (characterController != null && characterController.enabled)
-                characterController.Move(direction * speed * Time.deltaTime);
-            else
-                transform.position += direction * speed * Time.deltaTime;
-
-            yield return null;
-        }
+        yield return new WaitForSeconds(dodgeDuration);
 
         IsDodging = false;
 

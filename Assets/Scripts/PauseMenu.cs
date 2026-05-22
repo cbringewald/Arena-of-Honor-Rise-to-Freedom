@@ -24,12 +24,14 @@ public class PauseMenu : MonoBehaviour
     [Header("Options UI")]
     [SerializeField] private Slider musicVolumeSlider;
     [SerializeField] private Slider ambienceVolumeSlider;
+    [SerializeField] private Toggle fullscreenToggle;
 
     [Header("Cursor")]
     [SerializeField] private bool lockCursorWhenPlaying = true;
 
     private const string MusicVolumeKey = "MusicVolume";
     private const string AmbienceVolumeKey = "AmbienceVolume";
+    private const string FullscreenKey = "Fullscreen";
 
     [SerializeField, Range(0f, 1f)] private float defaultMusicVolume = 0f;
     [SerializeField, Range(0f, 1f)] private float defaultAmbienceVolume = 0.7f;
@@ -66,6 +68,7 @@ public class PauseMenu : MonoBehaviour
             optionsMenuUI.SetActive(false);
 
         LoadAudioOptions();
+        LoadFullscreenOption();
 
         ResumeGame(false);
     }
@@ -183,7 +186,8 @@ public class PauseMenu : MonoBehaviour
 
     public void SetFullscreen(bool value)
     {
-        Screen.fullScreen = value;
+        PlayClick();
+        ApplyFullscreen(value, true);
     }
 
     public void SetMusicVolume(float value)
@@ -240,6 +244,37 @@ public class PauseMenu : MonoBehaviour
             ambienceVolumeSlider.onValueChanged.RemoveListener(SetAmbienceVolume);
             ambienceVolumeSlider.onValueChanged.AddListener(SetAmbienceVolume);
         }
+    }
+
+    private void LoadFullscreenOption()
+    {
+        bool fullscreen = PlayerPrefs.HasKey(FullscreenKey)
+            ? PlayerPrefs.GetInt(FullscreenKey) == 1
+            : Screen.fullScreen;
+
+        ApplyFullscreen(fullscreen, false);
+
+        if (fullscreenToggle == null && optionsMenuUI != null)
+            fullscreenToggle = optionsMenuUI.GetComponentInChildren<Toggle>(true);
+
+        if (fullscreenToggle != null)
+        {
+            fullscreenToggle.onValueChanged.RemoveListener(SetFullscreen);
+            fullscreenToggle.SetIsOnWithoutNotify(fullscreen);
+            fullscreenToggle.onValueChanged.AddListener(SetFullscreen);
+        }
+    }
+
+    private void ApplyFullscreen(bool fullscreen, bool save)
+    {
+        FullScreenMode mode = fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+        Screen.SetResolution(Screen.currentResolution.width, Screen.currentResolution.height, mode);
+
+        if (!save)
+            return;
+
+        PlayerPrefs.SetInt(FullscreenKey, fullscreen ? 1 : 0);
+        PlayerPrefs.Save();
     }
 
     private void PlayClick()

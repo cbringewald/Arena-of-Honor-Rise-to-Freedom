@@ -134,6 +134,19 @@ public class Health : MonoBehaviour
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
+    public void SetUseDeathCamera(bool value)
+    {
+        useDeathCamera = value;
+    }
+
+    public void RestoreToFull()
+    {
+        if (currentHealth <= 0 || isDead) return;
+
+        currentHealth = maxHealth;
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+    }
+
     private IEnumerator HitFlash()
     {
         rend.material.color = hitColor;

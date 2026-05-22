@@ -15,6 +15,9 @@ public class Menu : MonoBehaviour
 
     [Header("Options")]
     [SerializeField] private Slider musicSlider;
+    [SerializeField] private Toggle fullscreenToggle;
+
+    private const string FullscreenKey = "Fullscreen";
 
     private void Start()
     {
@@ -32,6 +35,8 @@ public class Menu : MonoBehaviour
             musicSlider.value = musicSource.volume;
             musicSlider.onValueChanged.AddListener(SetMusicVolume);
         }
+
+        LoadFullscreenOption();
     }
 
     public void OpenOptionsPanel()
@@ -73,7 +78,38 @@ public class Menu : MonoBehaviour
     public void SetFullscreen(bool value)
     {
         PlayClick();
-        Screen.fullScreen = value;
+        ApplyFullscreen(value, true);
+    }
+
+    private void LoadFullscreenOption()
+    {
+        bool fullscreen = PlayerPrefs.HasKey(FullscreenKey)
+            ? PlayerPrefs.GetInt(FullscreenKey) == 1
+            : Screen.fullScreen;
+
+        ApplyFullscreen(fullscreen, false);
+
+        if (fullscreenToggle == null && optionsMenu != null)
+            fullscreenToggle = optionsMenu.GetComponentInChildren<Toggle>(true);
+
+        if (fullscreenToggle != null)
+        {
+            fullscreenToggle.onValueChanged.RemoveListener(SetFullscreen);
+            fullscreenToggle.SetIsOnWithoutNotify(fullscreen);
+            fullscreenToggle.onValueChanged.AddListener(SetFullscreen);
+        }
+    }
+
+    private void ApplyFullscreen(bool fullscreen, bool save)
+    {
+        FullScreenMode mode = fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+        Screen.SetResolution(Screen.currentResolution.width, Screen.currentResolution.height, mode);
+
+        if (!save)
+            return;
+
+        PlayerPrefs.SetInt(FullscreenKey, fullscreen ? 1 : 0);
+        PlayerPrefs.Save();
     }
 
     private void PlayClick()

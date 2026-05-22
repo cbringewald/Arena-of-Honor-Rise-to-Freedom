@@ -4,9 +4,9 @@ using UnityEngine;
 public class Stamina : MonoBehaviour
 {
     [Header("Stamina")]
-    [SerializeField] private float maxStamina = 100f;
-    [SerializeField] private float regenRate = 20f;
-    [SerializeField] private float regenDelay = 1f;
+    [SerializeField] private float maxStamina = 150f;
+    [SerializeField] private float regenRate = 30f;
+    [SerializeField] private float regenDelay = 0.65f;
 
     private float currentStamina;
     private float lastUseTime;
@@ -59,6 +59,24 @@ public class Stamina : MonoBehaviour
 
         currentStamina += amount;
         currentStamina = Mathf.Min(currentStamina, maxStamina);
+
+        OnStaminaChanged?.Invoke(currentStamina, maxStamina);
+    }
+
+    public void RestoreToFull()
+    {
+        currentStamina = maxStamina;
+        OnStaminaChanged?.Invoke(currentStamina, maxStamina);
+    }
+
+    public void SetMaxStamina(float newMaxStamina, bool refillStamina)
+    {
+        maxStamina = Mathf.Max(1f, newMaxStamina);
+
+        if (refillStamina)
+            currentStamina = maxStamina;
+        else
+            currentStamina = Mathf.Min(currentStamina, maxStamina);
 
         OnStaminaChanged?.Invoke(currentStamina, maxStamina);
     }

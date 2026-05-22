@@ -28,8 +28,8 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private Stamina stamina;
     [SerializeField] private bool runUsesStamina = true;
     [SerializeField] private bool jumpUsesStamina = true;
-    [SerializeField] private float runStaminaCostPerSecond = 12f;
-    [SerializeField] private float jumpStaminaCost = 18f;
+    [SerializeField] private float runStaminaCostPerSecond = 8f;
+    [SerializeField] private float jumpStaminaCost = 12f;
 
     [Header("Restricciones")]
     [SerializeField] private bool blockMovementWhileAttacking = true;
@@ -44,18 +44,27 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private Health health;
 
     [Header("Animator Parameters")]
+    [SerializeField] private string speedParameter = "Speed";
     [SerializeField] private string walkParameter = "Walk";
     [SerializeField] private string runParameter = "Run";
     [SerializeField] private string jumpParameter = "Jump";
     [SerializeField] private string groundedParameter = "IsGrounded";
+    [SerializeField] private float speedDampTime = 0.08f;
 
     private CharacterController controller;
     private Vector3 verticalVelocity;
 
+    private int speedHash;
     private int walkHash;
     private int runHash;
     private int jumpHash;
     private int groundedHash;
+
+    private bool hasSpeedParameter;
+    private bool hasWalkParameter;
+    private bool hasRunParameter;
+    private bool hasJumpParameter;
+    private bool hasGroundedParameter;
 
     private bool isJumping;
     private float lastJumpTime;
@@ -89,10 +98,7 @@ public class PlayerMove : MonoBehaviour
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
-        walkHash = Animator.StringToHash(walkParameter);
-        runHash = Animator.StringToHash(runParameter);
-        jumpHash = Animator.StringToHash(jumpParameter);
-        groundedHash = Animator.StringToHash(groundedParameter);
+        CacheAnimatorParameters();
     }
 
     private void Update()
@@ -135,7 +141,14 @@ public class PlayerMove : MonoBehaviour
 
         if (blockMovementWhileAttacking && playerCombat != null && playerCombat.IsAttacking)
         {
-            SetMovementAnimator(false, false);
+            bool movementKeyPressedDuringAttack =
+                Keyboard.current != null &&
+                (Keyboard.current.wKey.isPressed ||
+                Keyboard.current.aKey.isPressed ||
+                Keyboard.current.sKey.isPressed ||
+                Keyboard.current.dKey.isPressed);
+
+            SetMovementAnimator(movementKeyPressedDuringAttack ? 0.5f : 0f);
             HandleFootsteps(false, false);
             return;
         }
@@ -201,7 +214,10 @@ public class PlayerMove : MonoBehaviour
             controller.Move(moveDirection * speed * Time.deltaTime);
         }
 
-        bool isWalking = hasInput && !isRunning;
+        float animatorSpeed = 0f;
+
+        if (hasInput)
+            animatorSpeed = isRunning ? 1f : 0.5f;
 
         bool movementKeyPressed =
             Keyboard.current != null &&
@@ -217,7 +233,7 @@ public class PlayerMove : MonoBehaviour
             (playerDodge == null || !playerDodge.IsDodging);
 
         HandleFootsteps(shouldPlayFootsteps, isRunning);
-        SetMovementAnimator(isWalking, isRunning);
+        SetMovementAnimator(animatorSpeed);
     }
 
     private bool CanRunThisFrame()
@@ -274,7 +290,7 @@ public class PlayerMove : MonoBehaviour
 
         SetMovementAnimator(false, false);
 
-        if (animator != null)
+        if (animator != null && hasJumpParameter)
         {
             animator.ResetTrigger(jumpHash);
             animator.SetTrigger(jumpHash);
@@ -295,16 +311,59 @@ public class PlayerMove : MonoBehaviour
         if (animator == null || controller == null)
             return;
 
-        animator.SetBool(groundedHash, controller.isGrounded);
+        if (hasGroundedParameter)
+            animator.SetBool(groundedHash, controller.isGrounded);
     }
 
     private void SetMovementAnimator(bool walk, bool run)
     {
+        SetMovementAnimator(run ? 1f : walk ? 0.5f : 0f);
+    }
+
+    private void SetMovementAnimator(float speed)
+    {
         if (animator == null)
             return;
 
-        animator.SetBool(walkHash, walk);
-        animator.SetBool(runHash, run);
+        float normalizedSpeed = Mathf.Clamp01(speed);
+
+        if (hasSpeedParameter)
+            animator.SetFloat(speedHash, normalizedSpeed, speedDampTime, Time.deltaTime);
+
+        if (hasWalkParameter)
+            animator.SetBool(walkHash, normalizedSpeed > 0f && normalizedSpeed < 1f);
+
+        if (hasRunParameter)
+            animator.SetBool(runHash, normalizedSpeed >= 1f);
+    }
+
+    private void CacheAnimatorParameters()
+    {
+        speedHash = Animator.StringToHash(speedParameter);
+        walkHash = Animator.StringToHash(walkParameter);
+        runHash = Animator.StringToHash(runParameter);
+        jumpHash = Animator.StringToHash(jumpParameter);
+        groundedHash = Animator.StringToHash(groundedParameter);
+
+        hasSpeedParameter = HasAnimatorParameter(speedParameter, AnimatorControllerParameterType.Float);
+        hasWalkParameter = HasAnimatorParameter(walkParameter, AnimatorControllerParameterType.Bool);
+        hasRunParameter = HasAnimatorParameter(runParameter, AnimatorControllerParameterType.Bool);
+        hasJumpParameter = HasAnimatorParameter(jumpParameter, AnimatorControllerParameterType.Trigger);
+        hasGroundedParameter = HasAnimatorParameter(groundedParameter, AnimatorControllerParameterType.Bool);
+    }
+
+    private bool HasAnimatorParameter(string parameterName, AnimatorControllerParameterType type)
+    {
+        if (animator == null || string.IsNullOrWhiteSpace(parameterName))
+            return false;
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.type == type && parameter.name == parameterName)
+                return true;
+        }
+
+        return false;
     }
 
     private void HandleFootsteps(bool shouldPlay, bool isRunning)
