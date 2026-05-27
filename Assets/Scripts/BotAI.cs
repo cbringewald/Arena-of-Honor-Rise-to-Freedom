@@ -591,6 +591,13 @@ public class BotAI : MonoBehaviour
             return;
         }
 
+        if (!isAttacking && attackComboController != null && !attackComboController.CanAttackAtDistance(dist))
+        {
+            hasAttackLockPosition = false;
+            SetState(EnemyState.Chasing);
+            return;
+        }
+
         if (!isAttacking && ShouldKeepDistance(dist))
         {
             StartRetreat();

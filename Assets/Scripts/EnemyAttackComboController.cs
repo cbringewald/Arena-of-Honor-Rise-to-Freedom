@@ -37,6 +37,7 @@ public class EnemyAttackComboController : MonoBehaviour
 
     public int CurrentAttackIndex { get; private set; }
     public float CurrentCooldownMultiplier { get; private set; } = 1f;
+    public bool HasAttacks => attacks != null && attacks.Length > 0;
 
     private void Awake()
     {
@@ -69,6 +70,30 @@ public class EnemyAttackComboController : MonoBehaviour
 
         SetWeaponDamage(attack.damage);
         return CurrentCooldownMultiplier;
+    }
+
+    public bool CanAttackAtDistance(float distanceToPlayer)
+    {
+        if (!HasAttacks)
+            return true;
+
+        return distanceToPlayer <= GetMaxAttackDistance();
+    }
+
+    public float GetMaxAttackDistance()
+    {
+        if (!HasAttacks)
+            return 0f;
+
+        float maxDistance = 0f;
+
+        foreach (EnemyAttackOption attack in attacks)
+        {
+            if (attack != null)
+                maxDistance = Mathf.Max(maxDistance, attack.maxDistance);
+        }
+
+        return maxDistance;
     }
 
     private EnemyAttackOption PickAttack(float distanceToPlayer)

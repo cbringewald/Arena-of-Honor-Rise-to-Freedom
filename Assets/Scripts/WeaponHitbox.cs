@@ -22,8 +22,23 @@ public class WeaponHitbox : MonoBehaviour
 
     private readonly HashSet<Health> damagedTargets = new HashSet<Health>();
     private bool swingActive;
+    private int baseDamage;
     private static float lastHitstopTime;
     private const float hitstopCooldown = 0.15f;
+
+    public int Damage => damage;
+    public int BaseDamage => baseDamage;
+
+    private void Awake()
+    {
+        baseDamage = Mathf.Max(1, damage);
+        damage = baseDamage;
+    }
+
+    public void SetDamage(int newDamage)
+    {
+        damage = Mathf.Max(1, newDamage);
+    }
 
     public void StartSwing()
     {

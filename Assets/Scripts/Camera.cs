@@ -11,6 +11,7 @@ public class CameraOrbitCM : MonoBehaviour
 
     [Header("Position")]
     public float heightOffset = 1.6f;
+    [SerializeField] private float defaultPitch = 10f;
 
     [Header("Mouse Sensitivity")]
     public float mouseSensitivityX = 0.12f;
@@ -34,7 +35,10 @@ public class CameraOrbitCM : MonoBehaviour
     [SerializeField] private float cameraCollisionRadius = 0.18f;
     [SerializeField] private bool blockRotationAgainstObstacles = true;
     [SerializeField] private float cameraDistance = 4.5f;
+    [SerializeField] private float minCameraDistance = 1.15f;
     [SerializeField] private float collisionProbePadding = 0.15f;
+    [SerializeField] private float wallDistancePadding = 0.22f;
+    [SerializeField] private float distanceAdjustSpeed = 18f;
     [SerializeField] private bool onlyBlockMeshColliders = true;
     [SerializeField] private float collisionDampingIn = 0f;
     [SerializeField] private float collisionDampingOut = 0.35f;
@@ -45,6 +49,7 @@ public class CameraOrbitCM : MonoBehaviour
 
     private float currentYaw;
     private float currentPitch;
+    private float currentCameraDistance;
 
     private float yawVelocity;
     private float pitchVelocity;
@@ -62,8 +67,9 @@ public class CameraOrbitCM : MonoBehaviour
         targetYaw = startYaw;
         currentYaw = startYaw;
 
-        targetPitch = 10f;
-        currentPitch = 10f;
+        targetPitch = defaultPitch;
+        currentPitch = defaultPitch;
+        currentCameraDistance = GetAllowedCameraDistance(currentYaw, currentPitch);
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -163,7 +169,45 @@ public class CameraOrbitCM : MonoBehaviour
         cameraTarget.localRotation = Quaternion.Euler(currentPitch, 0f, 0f);
 
         if (thirdPersonFollow != null)
-            thirdPersonFollow.CameraDistance = cameraDistance;
+        {
+            float allowedDistance = GetAllowedCameraDistance(currentYaw, currentPitch);
+            currentCameraDistance = Mathf.MoveTowards(
+                currentCameraDistance,
+                allowedDistance,
+                distanceAdjustSpeed * Time.deltaTime);
+            thirdPersonFollow.CameraDistance = currentCameraDistance;
+        }
+    }
+
+    public void ResetViewToPlayer(bool instant = true)
+    {
+        if (player == null)
+            return;
+
+        targetYaw = player.eulerAngles.y;
+        targetPitch = defaultPitch;
+
+        yawVelocity = 0f;
+        pitchVelocity = 0f;
+
+        if (!instant)
+            return;
+
+        currentYaw = targetYaw;
+        currentPitch = targetPitch;
+        currentCameraDistance = cameraDistance;
+
+        if (cameraRoot != null)
+        {
+            cameraRoot.position = player.position + Vector3.up * heightOffset;
+            cameraRoot.rotation = Quaternion.Euler(0f, currentYaw, 0f);
+        }
+
+        if (cameraTarget != null)
+            cameraTarget.localRotation = Quaternion.Euler(currentPitch, 0f, 0f);
+
+        if (thirdPersonFollow != null)
+            thirdPersonFollow.CameraDistance = currentCameraDistance;
     }
 
     private void ApplyCameraInput(float yawInput, float pitchInput)
@@ -233,6 +277,16 @@ public class CameraOrbitCM : MonoBehaviour
         }
 
         return nearestDistance;
+    }
+
+    private float GetAllowedCameraDistance(float yaw, float pitch)
+    {
+        float collisionDistance = GetCameraCollisionDistance(yaw, pitch);
+
+        if (float.IsPositiveInfinity(collisionDistance))
+            return cameraDistance;
+
+        return Mathf.Clamp(collisionDistance - wallDistancePadding, minCameraDistance, cameraDistance);
     }
 
     private bool ShouldIgnoreCameraCollision(Collider hitCollider)

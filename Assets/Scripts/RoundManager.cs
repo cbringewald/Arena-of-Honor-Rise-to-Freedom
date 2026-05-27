@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Playables;
 using UnityEngine.SceneManagement;
 
 public enum RoundElevatorSpawnTrigger
@@ -37,7 +38,7 @@ public class RoundElevatorSpawnData
     public float holdAfterRise = 0.2f;
     public bool resetBelowAfterSpawn = false;
     public bool keepPassengersLockedDuringLift = true;
-    [Min(0.05f)] public float navMeshSnapRadiusAfterLift = 0.35f;
+    [Min(0.05f)] public float navMeshSnapRadiusAfterLift = 2f;
 
     [Header("Prefabs")]
     public GameObject[] possiblePrefabs;
@@ -91,6 +92,9 @@ public class RoundData
 
     [Header("Unlocked Weapons")]
     public GameObject[] unlockedWeaponPickups;
+
+    [Header("Unlocked Shields")]
+    public GameObject[] unlockedShieldPickups;
 }
 
 public class RoundManager : MonoBehaviour
@@ -103,10 +107,12 @@ public class RoundManager : MonoBehaviour
     [SerializeField] private Transform player;
     [SerializeField] private CharacterController playerController;
     [SerializeField] private PlayerCombat playerCombat;
+    [SerializeField] private PlayerBlock playerBlock;
     [SerializeField] private Health playerHealth;
     [SerializeField] private Stamina playerStamina;
     [SerializeField] private PlayerCelebration playerCelebration;
     [SerializeField] private Transform playerSpawnPoint;
+    [SerializeField] private CameraOrbitCM playerCamera;
 
     [Header("Enemy Spawns")]
     [SerializeField] private Transform[] enemySpawnPoints;
@@ -123,6 +129,7 @@ public class RoundManager : MonoBehaviour
 
     [Header("Weapon Pickups")]
     [SerializeField] private WeaponPickup[] weaponPickups;
+    [SerializeField] private ShieldPickup[] shieldPickups;
     [SerializeField] private bool onlyUseCurrentRoundWeaponList = true;
     [SerializeField] private bool autoFindWeaponPickups = true;
 
@@ -157,6 +164,9 @@ public class RoundManager : MonoBehaviour
 
     [Header("Final Victory")]
     [SerializeField] private FadeController fadeController;
+    [SerializeField] private PlayableDirector finalVictoryCinematic;
+    [SerializeField] private bool waitFinalVictoryCinematic = true;
+    [SerializeField, Min(0f)] private float finalVictoryCinematicDuration = 7f;
     [SerializeField] private string mainMenuSceneName = "MainMenu";
     [SerializeField] private float timeBeforeFade = 3f;
     [SerializeField] private float timeBeforeLoadMenu = 2f;
@@ -212,6 +222,9 @@ public class RoundManager : MonoBehaviour
         if (playerCombat == null && player != null)
             playerCombat = player.GetComponent<PlayerCombat>();
 
+        if (playerBlock == null && player != null)
+            playerBlock = player.GetComponent<PlayerBlock>();
+
         if (playerHealth == null && player != null)
             playerHealth = player.GetComponent<Health>();
 
@@ -224,11 +237,17 @@ public class RoundManager : MonoBehaviour
         if (playerCelebration == null && player != null)
             playerCelebration = player.gameObject.AddComponent<PlayerCelebration>();
 
+        if (playerCamera == null)
+            playerCamera = FindFirstObjectByType<CameraOrbitCM>();
+
         if (playerHealth != null)
             playerHealth.OnDamaged += OnPlayerDamaged;
 
         if (autoFindWeaponPickups && (weaponPickups == null || weaponPickups.Length == 0))
             weaponPickups = FindObjectsByType<WeaponPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        if (autoFindWeaponPickups && (shieldPickups == null || shieldPickups.Length == 0))
+            shieldPickups = FindObjectsByType<ShieldPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         if (autoFindArenaElevators && (arenaElevators == null || arenaElevators.Length == 0))
             arenaElevators = FindObjectsByType<ArenaElevatorSpawn>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -260,7 +279,9 @@ public class RoundManager : MonoBehaviour
 
         ResetPlayerToSpawn();
         ResetPlayerWeapon();
+        ResetPlayerShield();
         ResetWeaponPickups();
+        ResetShieldPickups();
         SetupWeaponUnlocks();
         ResetEnterArenaTrigger();
         SpawnEnemiesForRound();
@@ -289,6 +310,12 @@ public class RoundManager : MonoBehaviour
             playerCombat.UnequipWeapon();
     }
 
+    private void ResetPlayerShield()
+    {
+        if (playerBlock != null)
+            playerBlock.UnequipShield();
+    }
+
     private void ResetWeaponPickups()
     {
         if (weaponPickups == null)
@@ -301,17 +328,38 @@ public class RoundManager : MonoBehaviour
         }
     }
 
+    private void ResetShieldPickups()
+    {
+        if (shieldPickups == null)
+            return;
+
+        foreach (ShieldPickup pickup in shieldPickups)
+        {
+            if (pickup != null)
+                pickup.ResetPickup();
+        }
+    }
+
     private void SetupWeaponUnlocks()
     {
         foreach (RoundData round in rounds)
         {
-            if (round.unlockedWeaponPickups == null)
-                continue;
-
-            foreach (GameObject weapon in round.unlockedWeaponPickups)
+            if (round.unlockedWeaponPickups != null)
             {
-                if (weapon != null)
-                    weapon.SetActive(false);
+                foreach (GameObject weapon in round.unlockedWeaponPickups)
+                {
+                    if (weapon != null)
+                        weapon.SetActive(false);
+                }
+            }
+
+            if (round.unlockedShieldPickups != null)
+            {
+                foreach (GameObject shield in round.unlockedShieldPickups)
+                {
+                    if (shield != null)
+                        shield.SetActive(false);
+                }
             }
         }
 
@@ -319,13 +367,22 @@ public class RoundManager : MonoBehaviour
 
         for (int i = firstRoundToEnable; i <= currentRoundIndex && i < rounds.Count; i++)
         {
-            if (rounds[i].unlockedWeaponPickups == null)
-                continue;
-
-            foreach (GameObject weapon in rounds[i].unlockedWeaponPickups)
+            if (rounds[i].unlockedWeaponPickups != null)
             {
-                if (weapon != null)
-                    weapon.SetActive(true);
+                foreach (GameObject weapon in rounds[i].unlockedWeaponPickups)
+                {
+                    if (weapon != null)
+                        weapon.SetActive(true);
+                }
+            }
+
+            if (rounds[i].unlockedShieldPickups != null)
+            {
+                foreach (GameObject shield in rounds[i].unlockedShieldPickups)
+                {
+                    if (shield != null)
+                        shield.SetActive(true);
+                }
             }
         }
     }
@@ -774,11 +831,13 @@ public class RoundManager : MonoBehaviour
                 agent.enabled = false;
             }
             else if (UnityEngine.AI.NavMesh.SamplePosition(
-                passenger.transform.position,
+                agent.transform.position,
                 out UnityEngine.AI.NavMeshHit hit,
                 Mathf.Max(0.05f, navMeshSnapRadius),
                 UnityEngine.AI.NavMesh.AllAreas))
             {
+                Vector3 agentOffset = hit.position - agent.transform.position;
+                passenger.transform.position += agentOffset;
                 agent.enabled = true;
                 agent.Warp(hit.position);
             }
@@ -1088,8 +1147,6 @@ public class RoundManager : MonoBehaviour
         finalVictoryStarted = true;
         roundEnded = true;
 
-        ShowMessage("VICTORIA\n" + FameTitle + "\nRondas perfectas: " + flawlessRounds + "\nPulsa C para celebrar", messageDuration);
-
         if (arenaDoor != null)
             arenaDoor.OpenDoor();
 
@@ -1101,6 +1158,18 @@ public class RoundManager : MonoBehaviour
 
         Cursor.lockState = keepPlayerControlOnVictory ? CursorLockMode.Locked : CursorLockMode.None;
         Cursor.visible = !keepPlayerControlOnVictory;
+
+        if (finalVictoryCinematic != null)
+        {
+            finalVictoryCinematic.gameObject.SetActive(true);
+            finalVictoryCinematic.time = 0d;
+            finalVictoryCinematic.Play();
+
+            if (waitFinalVictoryCinematic)
+                yield return new WaitForSecondsRealtime(GetPlayableDuration(finalVictoryCinematic, finalVictoryCinematicDuration));
+        }
+
+        ShowMessage("VICTORIA\n" + FameTitle + "\nRondas perfectas: " + flawlessRounds + "\nPulsa C para celebrar", messageDuration);
 
         if (!loadMenuAfterVictory)
             yield break;
@@ -1131,6 +1200,9 @@ public class RoundManager : MonoBehaviour
 
         if (playerController != null)
             playerController.enabled = true;
+
+        if (playerCamera != null)
+            playerCamera.ResetViewToPlayer();
     }
 
     private void ClearSpawnedEnemies()
@@ -1275,14 +1347,6 @@ public class RoundManager : MonoBehaviour
         if (bonusFame > 0)
             message += "\nBonus sin dano +" + bonusFame;
 
-        if (data != null)
-        {
-            if (data.fullRestoreAfterRound)
-                message += "\nRecuperacion completa";
-            else
-                message += "\nVida +" + GetHealthReward(data) + " | Stamina +" + Mathf.RoundToInt(GetStaminaReward(data));
-        }
-
         return message;
     }
 
@@ -1346,5 +1410,13 @@ public class RoundManager : MonoBehaviour
             block.enabled = false;
 
         Debug.Log("Jugador desactivado: fin del juego");
+    }
+
+    private static float GetPlayableDuration(PlayableDirector director, float fallbackDuration)
+    {
+        if (director == null || director.duration <= 0d || double.IsInfinity(director.duration))
+            return Mathf.Max(0f, fallbackDuration);
+
+        return Mathf.Max(0f, (float)director.duration);
     }
 }

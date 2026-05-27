@@ -69,6 +69,7 @@ public class WeaponPickup : MonoBehaviour
             return;
 
         playerCombat = combat;
+        playerCombat.BeginPickupInteraction();
         playerInside = true;
 
         if (promptText != null)
@@ -85,6 +86,9 @@ public class WeaponPickup : MonoBehaviour
             return;
 
         playerInside = false;
+        if (playerCombat != null)
+            playerCombat.EndPickupInteraction();
+
         playerCombat = null;
 
         if (promptText != null)
@@ -93,6 +97,9 @@ public class WeaponPickup : MonoBehaviour
 
     public void ResetPickup()
     {
+        if (playerInside && playerCombat != null)
+            playerCombat.EndPickupInteraction();
+
         picked = false;
         playerInside = false;
         playerCombat = null;
@@ -108,6 +115,9 @@ public class WeaponPickup : MonoBehaviour
     public void DropFromPlayer(Transform playerTransform)
     {
         picked = false;
+        if (playerInside && playerCombat != null)
+            playerCombat.EndPickupInteraction();
+
         playerInside = false;
         playerCombat = null;
 

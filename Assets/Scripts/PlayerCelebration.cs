@@ -9,9 +9,12 @@ public class PlayerCelebration : MonoBehaviour
     [SerializeField] private Key celebrationKey = Key.C;
     [SerializeField] private bool allowCelebrationAnytime = true;
     [SerializeField] private string victoryTrigger = "Victory";
+    [SerializeField] private string locomotionStateName = "Locomotion";
     [SerializeField] private float celebrationDuration = 3f;
 
     private int victoryHash;
+    private int locomotionHash;
+    private Coroutine victoryRoutine;
     private bool celebrationLocked;
 
     public bool IsCelebrating { get; private set; }
@@ -26,6 +29,7 @@ public class PlayerCelebration : MonoBehaviour
             health = GetComponent<Health>();
 
         victoryHash = Animator.StringToHash(victoryTrigger);
+        locomotionHash = Animator.StringToHash(locomotionStateName);
     }
 
     private void Update()
@@ -55,7 +59,29 @@ public class PlayerCelebration : MonoBehaviour
         if (animator == null) return;
         if (health != null && health.IsDead) return;
 
-        StartCoroutine(VictoryRoutine());
+        victoryRoutine = StartCoroutine(VictoryRoutine());
+    }
+
+    public void CancelCelebration()
+    {
+        if (!IsCelebrating)
+            return;
+
+        if (victoryRoutine != null)
+        {
+            StopCoroutine(victoryRoutine);
+            victoryRoutine = null;
+        }
+
+        IsCelebrating = false;
+
+        if (animator == null)
+            return;
+
+        animator.ResetTrigger(victoryHash);
+
+        if (HasAnimatorState(locomotionHash))
+            animator.CrossFadeInFixedTime(locomotionHash, 0.08f);
     }
 
     private IEnumerator VictoryRoutine()
@@ -70,5 +96,20 @@ public class PlayerCelebration : MonoBehaviour
         yield return new WaitForSeconds(celebrationDuration);
 
         IsCelebrating = false;
+        victoryRoutine = null;
+    }
+
+    private bool HasAnimatorState(int stateHash)
+    {
+        if (animator == null)
+            return false;
+
+        for (int layer = 0; layer < animator.layerCount; layer++)
+        {
+            if (animator.HasState(layer, stateHash))
+                return true;
+        }
+
+        return false;
     }
 }

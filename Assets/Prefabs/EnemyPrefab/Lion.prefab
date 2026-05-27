@@ -350,7 +350,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 78250581bfaeb91489b42bd87648d5f8, type: 3}
       propertyPath: m_TagString
-      value: Untagged
+      value: Enemy
       objectReference: {fileID: 0}
     - target: {fileID: 1120082951747818875, guid: 78250581bfaeb91489b42bd87648d5f8, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -523,7 +523,7 @@ NavMeshAgent:
   m_AutoTraverseOffMeshLink: 1
   m_AutoBraking: 1
   m_AutoRepath: 1
-  m_Height: 1.2
+  m_Height: 1.65
   m_BaseOffset: 0
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
@@ -550,6 +550,7 @@ MonoBehaviour:
   agent: {fileID: 4122230667978695848}
   health: {fileID: 8490048654913879666}
   hitPoint: {fileID: 5728058090867887560}
+  audioSource: {fileID: 0}
   speedParameter: Speed
   backpedalParameter: Backpedal
   attackTriggerParameter: Attack
@@ -577,6 +578,10 @@ MonoBehaviour:
   avoidRepeatingAttack: 1
   roarBeforeFirstAttack: 1
   roarDuration: 1.2
+  roarSound: {fileID: 8300000, guid: 8c0df6e7240c50540b2ab54db3689ce5, type: 3}
+  deathSound: {fileID: 8300000, guid: 2b9e074a58d750b44a0cb193ef68ad85, type: 3}
+  roarVolume: 1
+  deathVolume: 1
 --- !u!114 &8490048654913879666
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -595,6 +600,11 @@ MonoBehaviour:
   flashTime: 0.1
   animator: {fileID: 8060587381007310680}
   deathTriggerName: Die
+  fallbackDeathTriggerName: Death
+  playDeathStateDirectly: 1
+  deathStateName: Die
+  fallbackDeathStateName: Death
+  deathCrossFadeDuration: 0.05
   hitTriggerName: Hit
   attackTriggerName: Attack
   useDeathCamera: 0

@@ -20,6 +20,7 @@ public class LionCombatController : MonoBehaviour
     [SerializeField] private NavMeshAgent agent;
     [SerializeField] private Health health;
     [SerializeField] private Transform hitPoint;
+    [SerializeField] private AudioSource audioSource;
 
     [Header("Animator Parameters")]
     [SerializeField] private string speedParameter = "Speed";
@@ -55,6 +56,12 @@ public class LionCombatController : MonoBehaviour
     [Header("Roar")]
     [SerializeField] private bool roarBeforeFirstAttack = true;
     [SerializeField] private float roarDuration = 0.85f;
+
+    [Header("Audio")]
+    [SerializeField] private AudioClip roarSound;
+    [SerializeField] private AudioClip deathSound;
+    [SerializeField, Range(0f, 1f)] private float roarVolume = 1f;
+    [SerializeField, Range(0f, 1f)] private float deathVolume = 1f;
 
     private Vector3 lastDestination;
     private float nextRepathTime;
@@ -95,6 +102,9 @@ public class LionCombatController : MonoBehaviour
 
         if (hitPoint == null)
             hitPoint = transform;
+
+        if (audioSource == null)
+            audioSource = GetComponent<AudioSource>();
 
         if (agent != null)
         {
@@ -386,6 +396,7 @@ public class LionCombatController : MonoBehaviour
         StopAgent();
         SetMovementAnimation(0f, false);
         FaceTarget();
+        PlayRoarSound();
         animator.SetTrigger(roarHash);
 
         yield return new WaitForSeconds(roarDuration);
@@ -493,9 +504,41 @@ public class LionCombatController : MonoBehaviour
         isBusy = true;
         StopAgent();
         SetMovementAnimation(0f, false);
+        PlayDeathSound();
 
         if (hasDeathParameter)
             animator.SetTrigger(deathHash);
+    }
+
+    public void LionAnim_PlayRoarSound()
+    {
+        PlayRoarSound();
+    }
+
+    public void LionAnim_PlayDeathSound()
+    {
+        PlayDeathSound();
+    }
+
+    private void PlayRoarSound()
+    {
+        PlayLionSound(roarSound, roarVolume);
+    }
+
+    private void PlayDeathSound()
+    {
+        PlayLionSound(deathSound, deathVolume);
+    }
+
+    private void PlayLionSound(AudioClip clip, float volume)
+    {
+        if (audioSource == null)
+            return;
+
+        AudioClip clipToPlay = clip != null ? clip : audioSource.clip;
+
+        if (clipToPlay != null)
+            audioSource.PlayOneShot(clipToPlay, volume);
     }
 
     private void FaceTarget()

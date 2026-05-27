@@ -78,7 +78,7 @@ public class EnemyWeaponHitbox : MonoBehaviour
         PlayerDefense defense = health.GetComponent<PlayerDefense>();
         if (defense != null)
         {
-            bool blocked = defense.TryBlockHit(ownerRoot, ref finalDamage);
+            bool blocked = defense.TryBlockHit(ownerRoot, other, ref finalDamage);
 
             if (blocked)
                 Debug.Log($"Golpe bloqueado por {health.gameObject.name}. Dano final: {finalDamage}");

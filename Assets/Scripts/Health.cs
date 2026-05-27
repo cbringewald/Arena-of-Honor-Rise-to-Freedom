@@ -14,6 +14,11 @@ public class Health : MonoBehaviour
     [Header("Death")]
     [SerializeField] private Animator animator;
     [SerializeField] private string deathTriggerName = "Die";
+    [SerializeField] private string fallbackDeathTriggerName = "Death";
+    [SerializeField] private bool playDeathStateDirectly = true;
+    [SerializeField] private string deathStateName = "Die";
+    [SerializeField] private string fallbackDeathStateName = "Death";
+    [SerializeField, Min(0f)] private float deathCrossFadeDuration = 0.05f;
     [SerializeField] private string hitTriggerName = "Hit";
     [SerializeField] private string attackTriggerName = "Attack";
     [SerializeField] private bool useDeathCamera = false;
@@ -102,7 +107,7 @@ public class Health : MonoBehaviour
             hitFlashCoroutine = StartCoroutine(HitFlash());
         }
 
-        if (animator != null && !string.IsNullOrEmpty(hitTriggerName))
+        if (animator != null && HasAnimatorParameter(hitTriggerName, AnimatorControllerParameterType.Trigger))
         {
             animator.ResetTrigger(hitTriggerName);
             animator.SetTrigger(hitTriggerName);
@@ -222,14 +227,34 @@ public class Health : MonoBehaviour
             Debug.Log("Trigger de muerte enviado al Animator: " + animator.name);
 
             // Limpiamos posibles triggers que estén compitiendo
-            if (!string.IsNullOrEmpty(hitTriggerName))
+            if (HasAnimatorParameter(hitTriggerName, AnimatorControllerParameterType.Trigger))
                 animator.ResetTrigger(hitTriggerName);
 
-            if (!string.IsNullOrEmpty(attackTriggerName))
+            if (HasAnimatorParameter(attackTriggerName, AnimatorControllerParameterType.Trigger))
                 animator.ResetTrigger(attackTriggerName);
 
-            animator.ResetTrigger(deathTriggerName);
-            animator.SetTrigger(deathTriggerName);
+            bool deathTriggerSent = SetAnimatorTriggerIfExists(deathTriggerName);
+
+            if (!deathTriggerSent)
+                deathTriggerSent = SetAnimatorTriggerIfExists(fallbackDeathTriggerName);
+
+            bool deathStatePlayed = false;
+
+            if (playDeathStateDirectly)
+            {
+                deathStatePlayed = CrossFadeStateIfExists(deathStateName);
+
+                if (!deathStatePlayed)
+                    deathStatePlayed = CrossFadeStateIfExists(fallbackDeathStateName);
+            }
+
+            if (!deathTriggerSent && !deathStatePlayed)
+            {
+                Debug.LogWarning(gameObject.name +
+                    ": no se encontro trigger ni estado de muerte. Revisa parametros '" +
+                    deathTriggerName + "'/'" + fallbackDeathTriggerName + "' o estados '" +
+                    deathStateName + "'/'" + fallbackDeathStateName + "'.");
+            }
         }
         else
         {
@@ -240,5 +265,48 @@ public class Health : MonoBehaviour
         {
             deathCam.FocusOnDeadEnemy(transform);
         }
+    }
+
+    private bool SetAnimatorTriggerIfExists(string triggerName)
+    {
+        if (!HasAnimatorParameter(triggerName, AnimatorControllerParameterType.Trigger))
+            return false;
+
+        animator.ResetTrigger(triggerName);
+        animator.SetTrigger(triggerName);
+        return true;
+    }
+
+    private bool CrossFadeStateIfExists(string stateName)
+    {
+        if (string.IsNullOrWhiteSpace(stateName))
+            return false;
+
+        int stateHash = Animator.StringToHash(stateName);
+
+        for (int layer = 0; layer < animator.layerCount; layer++)
+        {
+            if (!animator.HasState(layer, stateHash))
+                continue;
+
+            animator.CrossFadeInFixedTime(stateHash, deathCrossFadeDuration, layer);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HasAnimatorParameter(string parameterName, AnimatorControllerParameterType type)
+    {
+        if (animator == null || string.IsNullOrWhiteSpace(parameterName))
+            return false;
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.type == type && parameter.name == parameterName)
+                return true;
+        }
+
+        return false;
     }
 }

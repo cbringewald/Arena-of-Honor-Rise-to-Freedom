@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Playables;
 using UnityEngine.SceneManagement;
 
 public class PlayerDeathHandler : MonoBehaviour
@@ -15,6 +16,9 @@ public class PlayerDeathHandler : MonoBehaviour
     [Header("Death Settings")]
     [SerializeField] private float delayBeforeMainMenu = 4f;
     [SerializeField] private string mainMenuSceneName = "MainMenu";
+    [SerializeField] private PlayableDirector deathCinematic;
+    [SerializeField] private bool waitDeathCinematic = true;
+    [SerializeField, Min(0f)] private float deathCinematicDuration = 5f;
 
     [Header("Animator Parameters")]
     [SerializeField] private string deathTrigger = "Death";
@@ -63,7 +67,7 @@ public class PlayerDeathHandler : MonoBehaviour
         if (characterController != null)
             characterController.enabled = false;
 
-        if (animator != null && !string.IsNullOrEmpty(deathTrigger))
+        if (animator != null && HasAnimatorTrigger(deathTrigger))
         {
             animator.ResetTrigger(deathTrigger);
             animator.SetTrigger(deathTrigger);
@@ -75,7 +79,22 @@ public class PlayerDeathHandler : MonoBehaviour
             Cursor.visible = true;
         }
 
-        StartCoroutine(ReturnToMainMenuAfterDelay());
+        StartCoroutine(DeathRoutine());
+    }
+
+    private IEnumerator DeathRoutine()
+    {
+        if (deathCinematic != null)
+        {
+            deathCinematic.gameObject.SetActive(true);
+            deathCinematic.time = 0d;
+            deathCinematic.Play();
+
+            if (waitDeathCinematic)
+                yield return new WaitForSecondsRealtime(GetPlayableDuration(deathCinematic, deathCinematicDuration));
+        }
+
+        yield return ReturnToMainMenuAfterDelay();
     }
 
     private IEnumerator ReturnToMainMenuAfterDelay()
@@ -85,5 +104,27 @@ public class PlayerDeathHandler : MonoBehaviour
         Time.timeScale = 1f;
 
         SceneManager.LoadScene(mainMenuSceneName);
+    }
+
+    private static float GetPlayableDuration(PlayableDirector director, float fallbackDuration)
+    {
+        if (director == null || director.duration <= 0d || double.IsInfinity(director.duration))
+            return Mathf.Max(0f, fallbackDuration);
+
+        return Mathf.Max(0f, (float)director.duration);
+    }
+
+    private bool HasAnimatorTrigger(string triggerName)
+    {
+        if (animator == null || string.IsNullOrWhiteSpace(triggerName))
+            return false;
+
+        foreach (AnimatorControllerParameter parameter in animator.parameters)
+        {
+            if (parameter.type == AnimatorControllerParameterType.Trigger && parameter.name == triggerName)
+                return true;
+        }
+
+        return false;
     }
 }

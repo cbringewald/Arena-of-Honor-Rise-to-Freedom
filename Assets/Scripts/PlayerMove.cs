@@ -41,6 +41,7 @@ public class PlayerMove : MonoBehaviour
     [SerializeField] private PlayerCombat playerCombat;
     [SerializeField] private PlayerBlock playerBlock;
     [SerializeField] private PlayerDodge playerDodge;
+    [SerializeField] private PlayerCelebration playerCelebration;
     [SerializeField] private Health health;
 
     [Header("Animator Parameters")]
@@ -88,6 +89,9 @@ public class PlayerMove : MonoBehaviour
 
         if (playerDodge == null)
             playerDodge = GetComponent<PlayerDodge>();
+
+        if (playerCelebration == null)
+            playerCelebration = GetComponent<PlayerCelebration>();
 
         if (health == null)
             health = GetComponent<Health>();
@@ -141,14 +145,7 @@ public class PlayerMove : MonoBehaviour
 
         if (blockMovementWhileAttacking && playerCombat != null && playerCombat.IsAttacking)
         {
-            bool movementKeyPressedDuringAttack =
-                Keyboard.current != null &&
-                (Keyboard.current.wKey.isPressed ||
-                Keyboard.current.aKey.isPressed ||
-                Keyboard.current.sKey.isPressed ||
-                Keyboard.current.dKey.isPressed);
-
-            SetMovementAnimator(movementKeyPressedDuringAttack ? 0.5f : 0f);
+            SetMovementAnimator(0f);
             HandleFootsteps(false, false);
             return;
         }
@@ -166,6 +163,10 @@ public class PlayerMove : MonoBehaviour
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
 
         bool hasInput = moveInput.sqrMagnitude > 0.01f;
+
+        if (hasInput && playerCelebration != null && playerCelebration.IsCelebrating)
+            playerCelebration.CancelCelebration();
+
         bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
         bool wantsRun =
             hasInput &&

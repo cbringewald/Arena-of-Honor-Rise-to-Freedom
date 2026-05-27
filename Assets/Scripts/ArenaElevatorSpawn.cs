@@ -17,7 +17,7 @@ public class ArenaElevatorSpawn : MonoBehaviour
     [SerializeField] private float riseDuration = 1.2f;
     [SerializeField] private float holdAfterRise = 0.2f;
     [SerializeField] private bool resetBelowAfterSpawn = false;
-    [SerializeField, Min(0.05f)] private float navMeshSnapRadiusAfterLift = 0.35f;
+    [SerializeField, Min(0.05f)] private float navMeshSnapRadiusAfterLift = 2f;
 
     private Vector3 platformUpPosition;
     private Vector3 platformDownPosition;
@@ -161,8 +161,10 @@ public class ArenaElevatorSpawn : MonoBehaviour
 
             if (enabled)
             {
-                if (NavMesh.SamplePosition(passenger.transform.position, out NavMeshHit hit, navMeshSnapRadiusAfterLift, NavMesh.AllAreas))
+                if (NavMesh.SamplePosition(agent.transform.position, out NavMeshHit hit, navMeshSnapRadiusAfterLift, NavMesh.AllAreas))
                 {
+                    Vector3 agentOffset = hit.position - agent.transform.position;
+                    passenger.transform.position += agentOffset;
                     agent.Warp(hit.position);
                 }
                 else

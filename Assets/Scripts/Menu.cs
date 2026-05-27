@@ -59,7 +59,7 @@ public class Menu : MonoBehaviour
     {
         PlayClick();
 
-        SceneManager.LoadScene("Level1");
+        SceneManager.LoadScene("Introduction");
     }
 
     public void QuitGame()
