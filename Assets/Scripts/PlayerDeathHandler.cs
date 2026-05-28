@@ -9,6 +9,7 @@ public class PlayerDeathHandler : MonoBehaviour
     [SerializeField] private Health health;
     [SerializeField] private Animator animator;
     [SerializeField] private CharacterController characterController;
+    [SerializeField] private RoundMessageUI defeatMessageUI;
 
     [Header("Scripts To Disable On Death")]
     [SerializeField] private MonoBehaviour[] scriptsToDisable;
@@ -16,6 +17,7 @@ public class PlayerDeathHandler : MonoBehaviour
     [Header("Death Settings")]
     [SerializeField] private float delayBeforeMainMenu = 4f;
     [SerializeField] private string mainMenuSceneName = "MainMenu";
+    [SerializeField] private string defeatMessage = "DERROTA\nHas caido en la arena";
     [SerializeField] private PlayableDirector deathCinematic;
     [SerializeField] private bool waitDeathCinematic = true;
     [SerializeField, Min(0f)] private float deathCinematicDuration = 5f;
@@ -38,6 +40,9 @@ public class PlayerDeathHandler : MonoBehaviour
 
         if (characterController == null)
             characterController = GetComponent<CharacterController>();
+
+        if (defeatMessageUI == null)
+            defeatMessageUI = FindFirstObjectByType<RoundMessageUI>(FindObjectsInactive.Include);
     }
 
     private void Update()
@@ -79,7 +84,19 @@ public class PlayerDeathHandler : MonoBehaviour
             Cursor.visible = true;
         }
 
+        ShowDefeatMessage();
         StartCoroutine(DeathRoutine());
+    }
+
+    private void ShowDefeatMessage()
+    {
+        if (defeatMessageUI != null)
+        {
+            defeatMessageUI.ShowMessage(defeatMessage, delayBeforeMainMenu);
+            return;
+        }
+
+        Debug.Log(defeatMessage);
     }
 
     private IEnumerator DeathRoutine()

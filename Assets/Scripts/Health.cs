@@ -107,7 +107,9 @@ public class Health : MonoBehaviour
             hitFlashCoroutine = StartCoroutine(HitFlash());
         }
 
-        if (animator != null && HasAnimatorParameter(hitTriggerName, AnimatorControllerParameterType.Trigger))
+        bool botHandlesHitReaction = GetComponent<BotAI>() != null;
+
+        if (!botHandlesHitReaction && animator != null && HasAnimatorParameter(hitTriggerName, AnimatorControllerParameterType.Trigger))
         {
             animator.ResetTrigger(hitTriggerName);
             animator.SetTrigger(hitTriggerName);

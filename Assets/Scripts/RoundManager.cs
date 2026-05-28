@@ -87,7 +87,7 @@ public class RoundData
     public int fameReward = 30;
     public int noDamageFameBonus = 10;
     public int healthReward = 1;
-    public float staminaReward = 35f;
+    public float staminaReward = 12f;
     public bool fullRestoreAfterRound;
 
     [Header("Unlocked Weapons")]
@@ -146,7 +146,14 @@ public class RoundManager : MonoBehaviour
     [Header("Default Round Rewards")]
     [SerializeField] private int defaultNoDamageFameBonus = 10;
     [SerializeField] private int defaultHealthReward = 1;
-    [SerializeField] private float defaultStaminaReward = 35f;
+    [SerializeField] private float defaultStaminaReward = 12f;
+    [SerializeField, Min(0f)] private float maxStaminaRewardPerRound = 18f;
+
+    [Header("Enemy Scaling")]
+    [SerializeField] private bool scaleEnemiesByRound = true;
+    [SerializeField, Min(0f)] private float enemyDamageIncreasePerRound = 0.12f;
+    [SerializeField, Min(0f)] private float enemyAttackSpeedIncreasePerRound = 0.08f;
+    [SerializeField, Min(0f)] private float enemyMoveSpeedIncreasePerRound = 0.035f;
 
     [Header("UI")]
     [SerializeField] private TMP_Text roundText;
@@ -914,6 +921,7 @@ public class RoundManager : MonoBehaviour
         if (bot != null)
         {
             bot.SetPlayer(player);
+            ApplyEnemyRoundScaling(bot, null);
             return;
         }
 
@@ -923,9 +931,29 @@ public class RoundManager : MonoBehaviour
             lion = enemy.GetComponentInChildren<LionCombatController>();
 
         if (lion != null)
+        {
             lion.SetPlayer(player);
+            ApplyEnemyRoundScaling(null, lion);
+        }
         else
             Debug.LogWarning("El enemigo instanciado no tiene BotAI ni LionCombatController. Si es animal, anade una IA compatible o dejalo como objetivo pasivo.");
+    }
+
+    private void ApplyEnemyRoundScaling(BotAI bot, LionCombatController lion)
+    {
+        if (!scaleEnemiesByRound)
+            return;
+
+        int completedRounds = Mathf.Max(0, currentRoundIndex);
+        float damageMultiplier = 1f + enemyDamageIncreasePerRound * completedRounds;
+        float attackSpeedMultiplier = 1f + enemyAttackSpeedIncreasePerRound * completedRounds;
+        float movementSpeedMultiplier = 1f + enemyMoveSpeedIncreasePerRound * completedRounds;
+
+        if (bot != null)
+            bot.ApplyRoundScaling(damageMultiplier, attackSpeedMultiplier, movementSpeedMultiplier);
+
+        if (lion != null)
+            lion.ApplyRoundScaling(damageMultiplier, attackSpeedMultiplier, movementSpeedMultiplier);
     }
 
     private bool HasAnyEnemyPrefab(RoundData data)
@@ -1295,7 +1323,7 @@ public class RoundManager : MonoBehaviour
             roundText.text = "Ronda: " + CurrentRound;
 
         if (fameText != null)
-            fameText.text = "Fama: " + fame + " / " + fameGoal + " - " + FameTitle;
+            fameText.text = "Fama: " + FameTitle;
     }
 
     private void OnPlayerDamaged(int damage, string hitZone)
@@ -1345,7 +1373,7 @@ public class RoundManager : MonoBehaviour
         string message = "RONDA SUPERADA\n" + FameTitle + "\nFama +" + totalFameReward;
 
         if (bonusFame > 0)
-            message += "\nBonus sin dano +" + bonusFame;
+            message += "\nBonus +" + bonusFame;
 
         return message;
     }
@@ -1371,7 +1399,8 @@ public class RoundManager : MonoBehaviour
         if (data == null)
             return 0f;
 
-        return data.staminaReward > 0f ? data.staminaReward : defaultStaminaReward;
+        float reward = data.staminaReward > 0f ? data.staminaReward : defaultStaminaReward;
+        return maxStaminaRewardPerRound > 0f ? Mathf.Min(reward, maxStaminaRewardPerRound) : reward;
     }
 
     private string GetFameTitle()

@@ -34,6 +34,7 @@ public class PlayerMove : MonoBehaviour
     [Header("Restricciones")]
     [SerializeField] private bool blockMovementWhileAttacking = true;
     [SerializeField] private bool allowJumpWhileBlocking = false;
+    [SerializeField] private float stopMovementOnHitDuration = 0.25f;
 
     [Header("Referencias")]
     [SerializeField] private Transform cameraTransform;
@@ -70,6 +71,7 @@ public class PlayerMove : MonoBehaviour
     private bool isJumping;
     private float lastJumpTime;
     private float lastGroundedTime;
+    private float movementBlockedUntil;
 
     private void Awake()
     {
@@ -105,6 +107,18 @@ public class PlayerMove : MonoBehaviour
         CacheAnimatorParameters();
     }
 
+    private void OnEnable()
+    {
+        if (health != null)
+            health.OnDamaged += HandleDamaged;
+    }
+
+    private void OnDisable()
+    {
+        if (health != null)
+            health.OnDamaged -= HandleDamaged;
+    }
+
     private void Update()
     {
         if (controller == null || !controller.enabled || !gameObject.activeInHierarchy)
@@ -135,6 +149,13 @@ public class PlayerMove : MonoBehaviour
     {
         if (cameraTransform == null)
             return;
+
+        if (Time.time < movementBlockedUntil)
+        {
+            SetMovementAnimator(0f);
+            HandleFootsteps(false, false);
+            return;
+        }
 
         if (playerDodge != null && playerDodge.IsDodging)
         {
@@ -314,6 +335,16 @@ public class PlayerMove : MonoBehaviour
 
         if (hasGroundedParameter)
             animator.SetBool(groundedHash, controller.isGrounded);
+    }
+
+    private void HandleDamaged(int damage, string hitZone)
+    {
+        if (stopMovementOnHitDuration <= 0f)
+            return;
+
+        movementBlockedUntil = Time.time + stopMovementOnHitDuration;
+        SetMovementAnimator(0f);
+        HandleFootsteps(false, false);
     }
 
     private void SetMovementAnimator(bool walk, bool run)

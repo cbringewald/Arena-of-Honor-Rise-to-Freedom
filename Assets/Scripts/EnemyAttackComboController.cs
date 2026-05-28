@@ -34,6 +34,7 @@ public class EnemyAttackComboController : MonoBehaviour
     private int attackIndexHash;
     private int lastAttackIndex = int.MinValue;
     private bool hasAttackIndexParameter;
+    private float damageMultiplier = 1f;
 
     public int CurrentAttackIndex { get; private set; }
     public float CurrentCooldownMultiplier { get; private set; } = 1f;
@@ -68,8 +69,13 @@ public class EnemyAttackComboController : MonoBehaviour
         if (hasAttackIndexParameter)
             animator.SetInteger(attackIndexHash, attack.attackIndex);
 
-        SetWeaponDamage(attack.damage);
+        SetWeaponDamage(Mathf.RoundToInt(attack.damage * damageMultiplier));
         return CurrentCooldownMultiplier;
+    }
+
+    public void ApplyDamageMultiplier(float multiplier)
+    {
+        damageMultiplier *= Mathf.Max(0.1f, multiplier);
     }
 
     public bool CanAttackAtDistance(float distanceToPlayer)

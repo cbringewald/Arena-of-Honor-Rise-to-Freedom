@@ -14,8 +14,8 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private Health health;
 
     [Header("Attack Settings")]
-    [SerializeField] private float weaponAttackCost = 14f;
-    [SerializeField] private float unarmedAttackCost = 8f;
+    [SerializeField] private float weaponAttackCost = 20f;
+    [SerializeField] private float unarmedAttackCost = 12f;
     [SerializeField] private WeaponStyle currentWeaponStyle = WeaponStyle.Unarmed;
 
     [Header("Attack Variants")]
@@ -25,18 +25,18 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField, Min(1)] private int maceAttackVariants = 3;
     [SerializeField] private bool cycleAttackVariants = true;
     [SerializeField] private bool avoidImmediateAttackRepeat = true;
-    [SerializeField, Min(0.1f)] private float attackFailsafeDuration = 1.5f;
+    [SerializeField, Min(0.1f)] private float attackFailsafeDuration = 1.05f;
     [SerializeField] private bool maceUsesAxeAnimations = true;
 
     [Header("Attack Damage")]
     [SerializeField] private int[] unarmedAttackDamages = { 8, 10, 14 };
-    [SerializeField] private int[] swordAttackBonusDamage = { 0, 2, 5 };
+    [SerializeField] private int[] swordAttackBonusDamage = { 0, 2 };
     [SerializeField] private int[] axeAttackBonusDamage = { 0, 4, 8 };
     [SerializeField] private int[] maceAttackBonusDamage = { 0, 3, 7 };
 
     [Header("Combo Input")]
     [SerializeField] private bool bufferAttackInput = true;
-    [SerializeField, Min(0.05f)] private float attackInputBufferTime = 0.45f;
+    [SerializeField, Min(0.05f)] private float attackInputBufferTime = 0.8f;
     [SerializeField, Min(0f)] private float queuedAttackDelay = 0.02f;
 
     [Header("Weapon Visuals")]
@@ -347,7 +347,7 @@ public class PlayerCombat : MonoBehaviour
         switch (weaponStyle)
         {
             case WeaponStyle.Sword:
-                return swordAttackVariants;
+                return Mathf.Min(GetSafeAttackVariantCount(swordAttackVariants, swordAttackBonusDamage), 2);
             case WeaponStyle.Axe:
                 return axeAttackVariants;
             case WeaponStyle.Mace:

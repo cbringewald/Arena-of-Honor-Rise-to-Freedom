@@ -479,6 +479,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyHitboxController
   hitboxCollider: {fileID: 3218904843203835172}
   weaponHitbox: {fileID: 5028460642167803703}
+  hitboxColliders: []
+  weaponHitboxes: []
+  autoFindChildHitboxes: 1
 --- !u!114 &5028460642167803703
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -912,15 +915,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -2.1259508
+      value: 1.9621487
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.147
+      value: -0.000000094180315
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 8.924823
+      value: 15.2337475
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalRotation.w
@@ -1120,7 +1123,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_Name
-      value: Spartan_enemy (1)
+      value: Spartan_Enemy
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_Layer
@@ -2136,6 +2139,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       insertIndex: -1
       addedObject: {fileID: 8703100386859643138}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -7205540006242240691}
     - targetCorrespondingSourceObject: {fileID: 827075974287967996, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1289101810487546332}
@@ -2293,29 +2299,53 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BotAI
   player: {fileID: 0}
   playerHealth: {fileID: 0}
+  playerCombat: {fileID: 0}
+  canTargetPlayer: 1
+  canTargetEnemies: 1
+  canTargetOtherBots: 0
+  targetRefreshInterval: 0.35
+  targetSwitchDistanceBias: 0.75
   detectionRange: 25
   loseRange: 25
   attackRange: 2.16
   attackCooldown: 1.4
+  attackCooldownJitter: {x: 0, y: 0.35}
+  attackRangeBuffer: 0.25
+  attackFacingAngle: 70
+  lockPositionWhileAttacking: 1
+  attackComboController: {fileID: 0}
   runSpeed: 3.8
   retreatSpeed: 3.2
+  forwardStepSpeed: 2.1
+  forwardStepDistance: 2.6
+  maxBackpedalDistanceFromPlayer: 2.35
   fleeSpeed: 5.5
   fleeDistance: 8
   fleeDuration: 2.5
   safeDistance: 7
+  fleeRetryCooldown: 3
   hitReactionDuration: 0.45
   cancelAttackOnHit: 1
   defendDuration: 0.7
   retreatDuration: 0.9
   retreatDistance: 2.5
+  retreatRecoveryTime: 0.45
+  postAttackRecoveryTime: 0.45
   decisionCooldown: 0.4
+  minSpacingDistance: 1.15
+  lowHealthKeepAwayDistance: 2.1
   attackChanceHighHealth: 0.65
   defendChanceHighHealth: 0.2
   attackChanceLowHealth: 0.35
   defendChanceLowHealth: 0.3
+  lowHealthRetreatChance: 0.55
   lowHealthThreshold: 0.4
-  fleeHealthThreshold: 0.25
-  fleeChanceLowHealth: 0.65
+  playerAttackThreatRange: 2.4
+  playerAttackFacingAngle: 115
+  playerAttackReactionCooldown: 0.65
+  blockPlayerAttackChance: 0.45
+  backpedalPlayerAttackChance: 0.45
+  lowHealthBackpedalPlayerAttackChance: 0.75
   animator: {fileID: 3511278358474652126}
   health: {fileID: 3948005328776238563}
   walkParameter: Walk
@@ -2325,6 +2355,8 @@ MonoBehaviour:
   blockParameter: Block
   backpedalParameter: Backpedal
   snapToNavMeshDistance: 2
+  repathInterval: 0.15
+  destinationUpdateDistance: 0.35
 --- !u!114 &3948005328776238563
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2343,6 +2375,11 @@ MonoBehaviour:
   flashTime: 1.27
   animator: {fileID: 3511278358474652126}
   deathTriggerName: Die
+  fallbackDeathTriggerName: Death
+  playDeathStateDirectly: 1
+  deathStateName: Die
+  fallbackDeathStateName: Death
+  deathCrossFadeDuration: 0.05
   hitTriggerName: Hit
   attackTriggerName: Attack
   useDeathCamera: 0
@@ -2386,6 +2423,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyHitboxController
   hitboxCollider: {fileID: 3218904843203835172}
   weaponHitbox: {fileID: 5028460642167803703}
+  hitboxColliders: []
+  weaponHitboxes: []
+  autoFindChildHitboxes: 1
 --- !u!54 &7092231428418599142
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2568,6 +2608,45 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &-7205540006242240691
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 264440033124971510}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9bec8916085484f4dbdbcda250a9eb6b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyAttackComboController
+  animator: {fileID: 3511278358474652126}
+  weaponHitboxes:
+  - {fileID: 5028460642167803703}
+  attackIndexParameter: AttackIndex
+  avoidImmediateRepeat: 1
+  attacks:
+  - label: Attack 0
+    attackIndex: 0
+    damage: 1
+    minDistance: 0
+    maxDistance: 2.2
+    weight: 1
+    cooldownMultiplier: 1
+  - label: Attack 1
+    attackIndex: 1
+    damage: 1
+    minDistance: 0
+    maxDistance: 2.4
+    weight: 1
+    cooldownMultiplier: 1
+  - label: Attack 2
+    attackIndex: 2
+    damage: 2
+    minDistance: 0.8
+    maxDistance: 2.8
+    weight: 0.7
+    cooldownMultiplier: 1
 --- !u!1 &292819916119246939 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 827075974287967996, guid: 37f4e90286baab247adb9a26603d6248, type: 3}

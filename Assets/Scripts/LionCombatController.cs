@@ -62,6 +62,7 @@ public class LionCombatController : MonoBehaviour
     [SerializeField] private AudioClip deathSound;
     [SerializeField, Range(0f, 1f)] private float roarVolume = 1f;
     [SerializeField, Range(0f, 1f)] private float deathVolume = 1f;
+    [SerializeField] private bool playSoundsFromAnimationEvents = true;
 
     private Vector3 lastDestination;
     private float nextRepathTime;
@@ -105,6 +106,12 @@ public class LionCombatController : MonoBehaviour
 
         if (audioSource == null)
             audioSource = GetComponent<AudioSource>();
+
+        if (audioSource == null)
+            audioSource = GetComponentInChildren<AudioSource>(true);
+
+        if (audioSource == null)
+            audioSource = GetComponentInParent<AudioSource>();
 
         if (agent != null)
         {
@@ -396,7 +403,9 @@ public class LionCombatController : MonoBehaviour
         StopAgent();
         SetMovementAnimation(0f, false);
         FaceTarget();
-        PlayRoarSound();
+        if (!playSoundsFromAnimationEvents)
+            PlayRoarSound();
+
         animator.SetTrigger(roarHash);
 
         yield return new WaitForSeconds(roarDuration);
@@ -504,7 +513,8 @@ public class LionCombatController : MonoBehaviour
         isBusy = true;
         StopAgent();
         SetMovementAnimation(0f, false);
-        PlayDeathSound();
+        if (!playSoundsFromAnimationEvents)
+            PlayDeathSound();
 
         if (hasDeathParameter)
             animator.SetTrigger(deathHash);
@@ -520,25 +530,50 @@ public class LionCombatController : MonoBehaviour
         PlayDeathSound();
     }
 
-    private void PlayRoarSound()
+    public void PlayRoarSound()
     {
         PlayLionSound(roarSound, roarVolume);
     }
 
-    private void PlayDeathSound()
+    public void PlayDeathSound()
     {
         PlayLionSound(deathSound, deathVolume);
     }
 
+    public void ApplyRoundScaling(float damageMultiplier, float attackSpeedMultiplier, float movementSpeedMultiplier)
+    {
+        float safeAttackSpeed = Mathf.Max(0.1f, attackSpeedMultiplier);
+        float safeMovementSpeed = Mathf.Max(0.1f, movementSpeedMultiplier);
+
+        attackDamage = Mathf.Max(1, Mathf.RoundToInt(attackDamage * Mathf.Max(0.1f, damageMultiplier)));
+        attackCooldown = Mathf.Max(0.25f, attackCooldown / safeAttackSpeed);
+        attackDuration = Mathf.Max(0.35f, attackDuration / safeAttackSpeed);
+        attackHitDelay = Mathf.Max(0.05f, attackHitDelay / safeAttackSpeed);
+        walkSpeed *= safeMovementSpeed;
+        runSpeed *= safeMovementSpeed;
+        backpedalSpeed *= safeMovementSpeed;
+
+        if (agent != null)
+            agent.speed = runSpeed;
+    }
+
     private void PlayLionSound(AudioClip clip, float volume)
     {
-        if (audioSource == null)
+        AudioClip clipToPlay = clip != null ? clip : audioSource != null ? audioSource.clip : null;
+
+        if (clipToPlay == null)
+        {
+            Debug.LogWarning("LionCombatController: no hay clip de audio asignado para " + gameObject.name);
             return;
+        }
 
-        AudioClip clipToPlay = clip != null ? clip : audioSource.clip;
-
-        if (clipToPlay != null)
+        if (audioSource != null)
+        {
             audioSource.PlayOneShot(clipToPlay, volume);
+            return;
+        }
+
+        AudioSource.PlayClipAtPoint(clipToPlay, transform.position, volume);
     }
 
     private void FaceTarget()

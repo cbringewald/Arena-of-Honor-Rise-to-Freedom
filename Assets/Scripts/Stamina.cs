@@ -5,8 +5,8 @@ public class Stamina : MonoBehaviour
 {
     [Header("Stamina")]
     [SerializeField] private float maxStamina = 150f;
-    [SerializeField] private float regenRate = 30f;
-    [SerializeField] private float regenDelay = 0.65f;
+    [SerializeField] private float regenRate = 16f;
+    [SerializeField] private float regenDelay = 1.1f;
 
     private float currentStamina;
     private float lastUseTime;

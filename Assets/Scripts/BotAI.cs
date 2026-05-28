@@ -32,6 +32,7 @@ public class BotAI : MonoBehaviour
     [Header("Ataque")]
     [SerializeField] private float attackCooldown = 1.2f;
     [SerializeField] private Vector2 attackCooldownJitter = new Vector2(0f, 0.35f);
+    [SerializeField] private float attackFailsafeDuration = 1.25f;
     [SerializeField] private float attackRangeBuffer = 0.25f;
     [SerializeField] private float attackFacingAngle = 70f;
     [SerializeField] private bool lockPositionWhileAttacking = true;
@@ -112,6 +113,7 @@ public class BotAI : MonoBehaviour
     private float nextPlayerAttackReactionTime;
     private float postAttackRecoveryEndTime;
     private float nextTargetRefreshTime;
+    private float attackStartTime;
 
     private bool isChasing;
     private bool isAttacking;
@@ -120,6 +122,7 @@ public class BotAI : MonoBehaviour
     private bool wantsDefensiveActionAfterHit;
     private bool hasAttackLockPosition;
     private bool hasPostAttackLockPosition;
+    private bool hasHitReactionLockPosition;
 
     private float hitReactEndTime;
 
@@ -136,6 +139,7 @@ public class BotAI : MonoBehaviour
     private Vector3 fleeTarget;
     private Vector3 attackLockPosition;
     private Vector3 postAttackLockPosition;
+    private Vector3 hitReactionLockPosition;
     private Vector3 lastChaseDestination;
     private Vector3 lastKnownPlayerDir = Vector3.forward;
     private Transform currentTarget;
@@ -241,6 +245,7 @@ public class BotAI : MonoBehaviour
             if (Time.time >= hitReactEndTime)
             {
                 isHitReacting = false;
+                hasHitReactionLockPosition = false;
 
                 if (wantsDefensiveActionAfterHit)
                 {
@@ -253,6 +258,9 @@ public class BotAI : MonoBehaviour
         }
 
         float dist = Vector3.Distance(transform.position, currentTarget.position);
+
+        if (isAttacking && Time.time >= attackStartTime + attackFailsafeDuration)
+            EndAttack();
 
         if (!isChasing && dist <= detectionRange)
             isChasing = true;
@@ -282,14 +290,14 @@ public class BotAI : MonoBehaviour
         {
             case EnemyState.Patrolling:
                 if (dist <= attackRange)
-                    DecideCloseCombatAction();
+                    SetState(EnemyState.Attacking);
                 else
                     SetState(EnemyState.Chasing);
                 break;
 
             case EnemyState.Chasing:
                 if (dist <= attackRange)
-                    DecideCloseCombatAction();
+                    SetState(EnemyState.Attacking);
                 else
                     HandleChase();
                 break;
@@ -316,6 +324,7 @@ public class BotAI : MonoBehaviour
     {
         LockAttackPosition();
         LockPostAttackPosition();
+        LockHitReactionPosition();
     }
 
     private void StopCombatCompletely()
@@ -327,6 +336,7 @@ public class BotAI : MonoBehaviour
         wantsDefensiveActionAfterHit = false;
         hasAttackLockPosition = false;
         hasPostAttackLockPosition = false;
+        hasHitReactionLockPosition = false;
 
         StopAgent();
 
@@ -598,18 +608,13 @@ public class BotAI : MonoBehaviour
             return;
         }
 
-        if (!isAttacking && ShouldKeepDistance(dist))
-        {
-            StartRetreat();
-            return;
-        }
-
         if (!IsFacingPlayer(attackFacingAngle))
             return;
 
         if (Time.time >= nextAttackTime && !isAttacking)
         {
             isAttacking = true;
+            attackStartTime = Time.time;
             CaptureAttackLockPosition();
 
             float cooldownMultiplier = attackComboController != null
@@ -643,7 +648,7 @@ public class BotAI : MonoBehaviour
             SetBlockAnimation(false);
 
             if (dist <= attackRange)
-                DecideCloseCombatAction();
+                SetState(EnemyState.Attacking);
             else
                 SetState(EnemyState.Chasing);
         }
@@ -678,13 +683,11 @@ public class BotAI : MonoBehaviour
 
             if (IsLowHealth() && dist <= lowHealthKeepAwayDistance)
             {
-                SetState(EnemyState.Defending);
-                stateEndTime = Time.time + retreatRecoveryTime;
+                SetState(EnemyState.Attacking);
             }
             else if (dist <= attackRange)
             {
-                SetState(EnemyState.Defending);
-                stateEndTime = Time.time + retreatRecoveryTime;
+                SetState(EnemyState.Attacking);
             }
             else
             {
@@ -730,6 +733,12 @@ public class BotAI : MonoBehaviour
         nextDecisionTime = Time.time + decisionCooldown;
 
         float dist = currentTarget != null ? Vector3.Distance(transform.position, currentTarget.position) : Mathf.Infinity;
+
+        if (dist <= attackRange && Time.time >= nextAttackTime)
+        {
+            SetState(EnemyState.Attacking);
+            return;
+        }
 
         if (ShouldKeepDistance(dist))
         {
@@ -1060,6 +1069,8 @@ public class BotAI : MonoBehaviour
 
         isHitReacting = true;
         hitReactEndTime = Time.time + hitReactionDuration;
+        hitReactionLockPosition = transform.position;
+        hasHitReactionLockPosition = true;
         wantsDefensiveActionAfterHit = IsLowHealth() || Random.value < 0.35f;
 
         if (cancelAttackOnHit)
@@ -1072,6 +1083,11 @@ public class BotAI : MonoBehaviour
         postAttackRecoveryEndTime = 0f;
 
         StopAgent();
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.Warp(hitReactionLockPosition);
+            agent.nextPosition = hitReactionLockPosition;
+        }
 
         SetMovementAnimation(false, false);
         SetBlockAnimation(false);
@@ -1114,12 +1130,46 @@ public class BotAI : MonoBehaviour
     public void EndHitReaction()
     {
         isHitReacting = false;
+        hasHitReactionLockPosition = false;
+    }
+
+    private void LockHitReactionPosition()
+    {
+        if (!hasHitReactionLockPosition || !isHitReacting)
+            return;
+
+        Quaternion currentRotation = transform.rotation;
+        transform.position = hitReactionLockPosition;
+        transform.rotation = currentRotation;
+
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.nextPosition = hitReactionLockPosition;
+            agent.velocity = Vector3.zero;
+        }
     }
 
     public void IsAttacking()
     {
         isAttacking = true;
+        attackStartTime = Time.time;
         CaptureAttackLockPosition();
+    }
+
+    public void ApplyRoundScaling(float damageMultiplier, float attackSpeedMultiplier, float movementSpeedMultiplier)
+    {
+        float safeAttackSpeed = Mathf.Max(0.1f, attackSpeedMultiplier);
+        float safeMovementSpeed = Mathf.Max(0.1f, movementSpeedMultiplier);
+
+        attackCooldown = Mathf.Max(0.25f, attackCooldown / safeAttackSpeed);
+        attackCooldownJitter *= Mathf.Clamp01(1f / safeAttackSpeed);
+        attackFailsafeDuration = Mathf.Max(0.55f, attackFailsafeDuration / safeAttackSpeed);
+        runSpeed *= safeMovementSpeed;
+        forwardStepSpeed *= safeMovementSpeed;
+        retreatSpeed *= safeMovementSpeed;
+
+        if (attackComboController != null)
+            attackComboController.ApplyDamageMultiplier(damageMultiplier);
     }
 
     public void SetPlayer(Transform newPlayer)
