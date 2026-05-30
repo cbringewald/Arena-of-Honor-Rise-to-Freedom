@@ -7,6 +7,7 @@ public class WeaponPickup : MonoBehaviour
     [SerializeField] private WeaponStyle weaponStyle = WeaponStyle.Sword;
     [SerializeField] private GameObject weaponInHandObject;
     [SerializeField] private GameObject weaponWorldObject;
+    [SerializeField, Min(0f)] private float attackStaminaCostOverride = 0f;
 
     [Header("UI")]
     [SerializeField] private GameObject promptText;
@@ -43,7 +44,7 @@ public class WeaponPickup : MonoBehaviour
                 return;
             }
             
-            playerCombat.EquipWeapon(weaponStyle, weaponInHandObject, this);
+            playerCombat.EquipWeapon(weaponStyle, weaponInHandObject, this, attackStaminaCostOverride);
 
             if (sfxSource != null && pickupSound != null)
                 sfxSource.PlayOneShot(pickupSound);

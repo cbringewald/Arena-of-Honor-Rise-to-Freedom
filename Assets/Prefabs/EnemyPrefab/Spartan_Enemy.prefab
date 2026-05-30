@@ -286,8 +286,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cc2bd41e998db8e43bf9bfb258999642, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthBarUI
-  playerHealth: {fileID: 0}
-  slider: {fileID: 0}
+  playerHealth: {fileID: 3948005328776238563}
+  slider: {fileID: 4945024934781723220}
 --- !u!114 &479925294261857258
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -494,7 +494,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ebdd259f15ea16d42b8c5bc5f740b713, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyWeaponHitbox
-  damage: 1
+  damage: 18
   ownerRoot: {fileID: 639698491487955276}
   audioSource: {fileID: 8703100386859643138}
   hitSounds:
@@ -915,15 +915,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.9621487
+      value: 2.3875935
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.000000094180315
+      value: 0.5308537
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 15.2337475
+      value: 38.81761
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 37f4e90286baab247adb9a26603d6248, type: 3}
       propertyPath: m_LocalRotation.w
@@ -2307,13 +2307,14 @@ MonoBehaviour:
   targetSwitchDistanceBias: 0.75
   detectionRange: 25
   loseRange: 25
-  attackRange: 2.16
+  attackRange: 1.7
   attackCooldown: 1.4
   attackCooldownJitter: {x: 0, y: 0.35}
+  attackFailsafeDuration: 1.25
   attackRangeBuffer: 0.25
   attackFacingAngle: 70
   lockPositionWhileAttacking: 1
-  attackComboController: {fileID: 0}
+  attackComboController: {fileID: -7205540006242240691}
   runSpeed: 3.8
   retreatSpeed: 3.2
   forwardStepSpeed: 2.1
@@ -2486,10 +2487,10 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.16975047
+  m_Radius: 0.19089596
   m_Height: 1.4531965
   m_Direction: 1
-  m_Center: {x: 0.009538929, y: 0.7404561, z: 0.02222971}
+  m_Center: {x: 0.009538929, y: 0.7404561, z: 0.0010842085}
 --- !u!114 &6732274285967863453
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2625,6 +2626,7 @@ MonoBehaviour:
   - {fileID: 5028460642167803703}
   attackIndexParameter: AttackIndex
   avoidImmediateRepeat: 1
+  overrideWeaponDamageFromAttackOptions: 0
   attacks:
   - label: Attack 0
     attackIndex: 0

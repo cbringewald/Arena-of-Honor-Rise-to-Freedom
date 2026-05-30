@@ -24,6 +24,7 @@ public class EnemyAttackComboController : MonoBehaviour
     [SerializeField] private bool avoidImmediateRepeat = true;
 
     [Header("Attacks")]
+    [SerializeField] private bool overrideWeaponDamageFromAttackOptions = false;
     [SerializeField] private EnemyAttackOption[] attacks =
     {
         new EnemyAttackOption { label = "Attack 0", attackIndex = 0, damage = 1, minDistance = 0f, maxDistance = 2.2f, weight = 1f },
@@ -69,7 +70,9 @@ public class EnemyAttackComboController : MonoBehaviour
         if (hasAttackIndexParameter)
             animator.SetInteger(attackIndexHash, attack.attackIndex);
 
-        SetWeaponDamage(Mathf.RoundToInt(attack.damage * damageMultiplier));
+        if (overrideWeaponDamageFromAttackOptions)
+            SetWeaponDamage(Mathf.RoundToInt(attack.damage * damageMultiplier));
+
         return CurrentCooldownMultiplier;
     }
 

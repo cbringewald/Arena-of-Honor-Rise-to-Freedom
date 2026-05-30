@@ -79,6 +79,7 @@ public class RoundData
     public bool randomizeEnemyPrefabs = false;
     public int enemyCount = 1;
     public int enemyHealth = 3;
+    public bool enemyFreeForAll = false;
 
     [Header("Elevator Spawns")]
     public RoundElevatorSpawnData[] elevatorSpawns;
@@ -99,6 +100,15 @@ public class RoundData
 
 public class RoundManager : MonoBehaviour
 {
+    [System.Serializable]
+    public class FameRankStats
+    {
+        public string title = "Esclavo de la arena";
+        public int minimumFame = 0;
+        public int maxHealth = 100;
+        public float maxStamina = 120f;
+    }
+
     [Header("Audio")]
     [SerializeField] private AudioSource sfxSource;
     [SerializeField] private AudioClip victorySound;
@@ -118,6 +128,7 @@ public class RoundManager : MonoBehaviour
     [SerializeField] private Transform[] enemySpawnPoints;
     [SerializeField] private ArenaElevatorSpawn[] arenaElevators;
     [SerializeField] private bool autoFindArenaElevators = true;
+    [SerializeField] private bool waitForCloseDoorTriggerToStartEnemies = true;
     [SerializeField] private bool useDeathCameraForEnemyKills = false;
     [SerializeField] private bool snapRegularSpawnsToNavMesh = true;
     [SerializeField] private bool snapElevatorSpawnsToNavMesh = false;
@@ -138,10 +149,17 @@ public class RoundManager : MonoBehaviour
 
     [Header("Fame")]
     [SerializeField] private int fame = 0;
-    [SerializeField] private int fameGoal = 100;
+    [SerializeField] private int fameGoal = 9999;
     [SerializeField] private bool winWhenFameGoalReached = true;
-    [SerializeField] private int contenderFame = 25;
-    [SerializeField] private int championFame = 70;
+    [SerializeField] private int contenderFame = 100;
+    [SerializeField] private int championFame = 500;
+    [SerializeField] private FameRankStats[] fameRankStats =
+    {
+        new FameRankStats { title = "Esclavo de la arena", minimumFame = 0, maxHealth = 100, maxStamina = 120f },
+        new FameRankStats { title = "Aspirante del pueblo", minimumFame = 100, maxHealth = 110, maxStamina = 130f },
+        new FameRankStats { title = "Campeon de la arena", minimumFame = 500, maxHealth = 125, maxStamina = 140f },
+        new FameRankStats { title = "Gladiador libre", minimumFame = 2200, maxHealth = 125, maxStamina = 140f }
+    };
 
     [Header("Default Round Rewards")]
     [SerializeField] private int defaultNoDamageFameBonus = 10;
@@ -151,7 +169,7 @@ public class RoundManager : MonoBehaviour
 
     [Header("Enemy Scaling")]
     [SerializeField] private bool scaleEnemiesByRound = true;
-    [SerializeField, Min(0f)] private float enemyDamageIncreasePerRound = 0.12f;
+    [SerializeField, Min(0f)] private float enemyDamageIncreasePerRound = 0f;
     [SerializeField, Min(0f)] private float enemyAttackSpeedIncreasePerRound = 0.08f;
     [SerializeField, Min(0f)] private float enemyMoveSpeedIncreasePerRound = 0.035f;
 
@@ -174,15 +192,16 @@ public class RoundManager : MonoBehaviour
     [SerializeField] private PlayableDirector finalVictoryCinematic;
     [SerializeField] private bool waitFinalVictoryCinematic = true;
     [SerializeField, Min(0f)] private float finalVictoryCinematicDuration = 7f;
-    [SerializeField] private string mainMenuSceneName = "MainMenu";
-    [SerializeField] private float timeBeforeFade = 3f;
-    [SerializeField] private float timeBeforeLoadMenu = 2f;
+    [SerializeField] private string mainMenuSceneName = "Creditos";
+    [SerializeField] private float timeBeforeFade = 0.5f;
+    [SerializeField] private float timeBeforeLoadMenu = 0.5f;
     [SerializeField] private bool keepPlayerControlOnVictory = true;
-    [SerializeField] private bool loadMenuAfterVictory = false;
+    [SerializeField] private bool loadMenuAfterVictory = true;
 
     private int currentRoundIndex;
     private bool roundEnded;
     private bool finalVictoryStarted;
+    private bool currentRoundEnemiesActivated;
     private bool playerTookDamageThisRound;
     private int enemiesKilledThisRound;
     private int flawlessRounds;
@@ -250,6 +269,8 @@ public class RoundManager : MonoBehaviour
         if (playerHealth != null)
             playerHealth.OnDamaged += OnPlayerDamaged;
 
+        ApplyFameRankStats(true);
+
         if (autoFindWeaponPickups && (weaponPickups == null || weaponPickups.Length == 0))
             weaponPickups = FindObjectsByType<WeaponPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
@@ -272,6 +293,7 @@ public class RoundManager : MonoBehaviour
         }
 
         roundEnded = false;
+        currentRoundEnemiesActivated = !waitForCloseDoorTriggerToStartEnemies;
         playerTookDamageThisRound = false;
         enemiesKilledThisRound = 0;
         startedElevatorSpawnEvents.Clear();
@@ -302,13 +324,41 @@ public class RoundManager : MonoBehaviour
 
     private string BuildRoundStartMessage(RoundData data)
     {
-        if (data != null && !string.IsNullOrWhiteSpace(data.startMessage))
-            return data.startMessage;
+        if (data != null)
+        {
+            string customMessage = NormalizeRoundMessage(data.startMessage);
+
+            if (!string.IsNullOrWhiteSpace(customMessage) && !IsOnlyRoundTitle(customMessage))
+                return customMessage;
+        }
 
         if (currentRoundIndex >= rounds.Count - 1)
             return "RONDA FINAL\nLucha por tu libertad";
 
         return data != null ? data.roundName + "\nPreparate!" : "RONDA\nPreparate!";
+    }
+
+    private bool IsOnlyRoundTitle(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return true;
+
+        string normalized = message.Trim().Replace(":", "");
+        return normalized.Equals("RONDA " + CurrentRound, System.StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("RONDA FINAL", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRoundMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return string.Empty;
+
+        string normalized = message.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
+
+        while (normalized.Contains("\n\n\n"))
+            normalized = normalized.Replace("\n\n\n", "\n\n");
+
+        return normalized;
     }
 
     private void ResetPlayerWeapon()
@@ -444,7 +494,7 @@ public class RoundManager : MonoBehaviour
                 continue;
 
             GameObject enemy = SpawnEnemyPrefab(prefab, spawnPoint.position, spawnPoint.rotation, snapRegularSpawnsToNavMesh);
-            RegisterSpawnedEnemy(enemy, data.enemyHealth);
+            RegisterSpawnedEnemy(enemy, data.enemyHealth, data);
         }
     }
 
@@ -567,7 +617,7 @@ public class RoundManager : MonoBehaviour
 
             GameObject enemy = elevator.Spawn(prefab, player);
             int health = spawnData.healthOverride > 0 ? spawnData.healthOverride : data.enemyHealth;
-            RegisterSpawnedEnemy(enemy, health);
+            RegisterSpawnedEnemy(enemy, health, data);
         }
     }
 
@@ -693,7 +743,7 @@ public class RoundManager : MonoBehaviour
             GameObject enemy = SpawnEnemyPrefab(prefab, spawn.position, spawn.rotation, snapElevatorSpawnsToNavMesh);
 
             int health = spawnData.healthOverride > 0 ? spawnData.healthOverride : data.enemyHealth;
-            RegisterSpawnedEnemy(enemy, health);
+            RegisterSpawnedEnemy(enemy, health, data);
         }
     }
 
@@ -744,7 +794,7 @@ public class RoundManager : MonoBehaviour
             SetPassengerCombatEnabled(enemy, false, spawnData.navMeshSnapRadiusAfterLift);
 
             int health = spawnData.healthOverride > 0 ? spawnData.healthOverride : data.enemyHealth;
-            RegisterSpawnedEnemy(enemy, health);
+            RegisterSpawnedEnemy(enemy, health, data);
         }
 
         float elapsed = 0f;
@@ -775,7 +825,7 @@ public class RoundManager : MonoBehaviour
                 continue;
 
             passenger.transform.SetParent(null, true);
-            SetPassengerCombatEnabled(passenger, true, spawnData.navMeshSnapRadiusAfterLift);
+            SetPassengerCombatEnabled(passenger, currentRoundEnemiesActivated, spawnData.navMeshSnapRadiusAfterLift);
         }
 
         if (spawnData.resetBelowAfterSpawn)
@@ -890,7 +940,7 @@ public class RoundManager : MonoBehaviour
         return true;
     }
 
-    private void RegisterSpawnedEnemy(GameObject enemy, int healthValue)
+    private void RegisterSpawnedEnemy(GameObject enemy, int healthValue, RoundData roundData)
     {
         if (enemy == null)
             return;
@@ -921,7 +971,9 @@ public class RoundManager : MonoBehaviour
         if (bot != null)
         {
             bot.SetPlayer(player);
+            bot.SetCanTargetOtherBots(roundData != null && roundData.enemyFreeForAll);
             ApplyEnemyRoundScaling(bot, null);
+            bot.enabled = currentRoundEnemiesActivated;
             return;
         }
 
@@ -934,9 +986,40 @@ public class RoundManager : MonoBehaviour
         {
             lion.SetPlayer(player);
             ApplyEnemyRoundScaling(null, lion);
+            lion.enabled = currentRoundEnemiesActivated;
         }
         else
             Debug.LogWarning("El enemigo instanciado no tiene BotAI ni LionCombatController. Si es animal, anade una IA compatible o dejalo como objetivo pasivo.");
+    }
+
+    public void ActivateCurrentRoundEnemies()
+    {
+        currentRoundEnemiesActivated = true;
+
+        foreach (GameObject enemy in spawnedEnemies)
+            SetEnemyCombatEnabled(enemy, true);
+    }
+
+    private static void SetEnemyCombatEnabled(GameObject enemy, bool enabled)
+    {
+        if (enemy == null)
+            return;
+
+        BotAI bot = enemy.GetComponent<BotAI>();
+
+        if (bot == null)
+            bot = enemy.GetComponentInChildren<BotAI>(true);
+
+        if (bot != null)
+            bot.enabled = enabled;
+
+        LionCombatController lion = enemy.GetComponent<LionCombatController>();
+
+        if (lion == null)
+            lion = enemy.GetComponentInChildren<LionCombatController>(true);
+
+        if (lion != null)
+            lion.enabled = enabled;
     }
 
     private void ApplyEnemyRoundScaling(BotAI bot, LionCombatController lion)
@@ -1135,6 +1218,7 @@ public class RoundManager : MonoBehaviour
         int totalFameReward = data.fameReward + bonusFame;
 
         fame += totalFameReward;
+        ApplyFameRankStats(false);
         ApplyRoundRecovery(data);
         UpdateUI();
 
@@ -1197,10 +1281,11 @@ public class RoundManager : MonoBehaviour
                 yield return new WaitForSecondsRealtime(GetPlayableDuration(finalVictoryCinematic, finalVictoryCinematicDuration));
         }
 
-        ShowMessage("VICTORIA\n" + FameTitle + "\nRondas perfectas: " + flawlessRounds + "\nPulsa C para celebrar", messageDuration);
-
         if (!loadMenuAfterVictory)
+        {
+            ShowMessage("VICTORIA\n" + FameTitle + "\nRondas perfectas: " + flawlessRounds + "\nPulsa C para celebrar", messageDuration);
             yield break;
+        }
 
         yield return new WaitForSecondsRealtime(timeBeforeFade);
 
@@ -1320,10 +1405,21 @@ public class RoundManager : MonoBehaviour
     private void UpdateUI()
     {
         if (roundText != null)
-            roundText.text = "Ronda: " + CurrentRound;
+            roundText.text = "Ronda " + CurrentRound;
 
         if (fameText != null)
-            fameText.text = "Fama: " + FameTitle;
+        {
+            fameText.enableWordWrapping = false;
+            fameText.enableAutoSizing = true;
+            fameText.fontSizeMin = 24f;
+            fameText.fontSizeMax = 36f;
+            fameText.text = BuildFameText();
+        }
+    }
+
+    private string BuildFameText()
+    {
+        return "Fama " + fame + " / " + FameTitle;
     }
 
     private void OnPlayerDamaged(int damage, string hitZone)
@@ -1370,12 +1466,18 @@ public class RoundManager : MonoBehaviour
 
     private string BuildRoundRewardMessage(RoundData data, int totalFameReward, int bonusFame)
     {
-        string message = "RONDA SUPERADA\n" + FameTitle + "\nFama +" + totalFameReward;
+        if (data != null && data.fullRestoreAfterRound)
+            return "RONDA SUPERADA\n+" + totalFameReward + " Fama\nVida completa\nStamina completa";
 
-        if (bonusFame > 0)
-            message += "\nBonus +" + bonusFame;
+        int healthReward = GetHealthReward(data);
+        float staminaReward = GetStaminaReward(data);
 
-        return message;
+        return "RONDA SUPERADA\n+" + totalFameReward + " Fama\n+" + healthReward + " Vida\n+" + FormatStaminaReward(staminaReward) + " Stamina";
+    }
+
+    private static string FormatStaminaReward(float value)
+    {
+        return Mathf.Approximately(value, Mathf.Round(value)) ? Mathf.RoundToInt(value).ToString() : value.ToString("0.#");
     }
 
     private int GetNoDamageBonus(RoundData data)
@@ -1405,6 +1507,11 @@ public class RoundManager : MonoBehaviour
 
     private string GetFameTitle()
     {
+        FameRankStats rank = GetCurrentFameRank();
+
+        if (rank != null && !string.IsNullOrWhiteSpace(rank.title))
+            return rank.title;
+
         if (fame >= fameGoal)
             return "Gladiador libre";
 
@@ -1415,6 +1522,43 @@ public class RoundManager : MonoBehaviour
             return "Aspirante del pueblo";
 
         return "Esclavo de la arena";
+    }
+
+    private void ApplyFameRankStats(bool refill)
+    {
+        FameRankStats rank = GetCurrentFameRank();
+
+        if (rank == null)
+            return;
+
+        if (playerHealth != null && rank.maxHealth > 0 && playerHealth.MaxHealth != rank.maxHealth)
+            playerHealth.SetMaxHealth(rank.maxHealth, refill);
+
+        if (playerStamina != null && rank.maxStamina > 0f && !Mathf.Approximately(playerStamina.MaxStamina, rank.maxStamina))
+            playerStamina.SetMaxStamina(rank.maxStamina, refill);
+    }
+
+    private FameRankStats GetCurrentFameRank()
+    {
+        if (fameRankStats == null || fameRankStats.Length == 0)
+            return null;
+
+        FameRankStats bestRank = null;
+        int bestMinimum = int.MinValue;
+
+        foreach (FameRankStats rank in fameRankStats)
+        {
+            if (rank == null)
+                continue;
+
+            if (fame < rank.minimumFame || rank.minimumFame < bestMinimum)
+                continue;
+
+            bestRank = rank;
+            bestMinimum = rank.minimumFame;
+        }
+
+        return bestRank;
     }
 
     private void DisablePlayerControl()

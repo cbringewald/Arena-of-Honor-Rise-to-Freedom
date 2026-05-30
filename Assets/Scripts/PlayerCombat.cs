@@ -14,8 +14,11 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private Health health;
 
     [Header("Attack Settings")]
+    [SerializeField] private float unarmedAttackCost = 10f;
+    [SerializeField] private float swordAttackCost = 14f;
+    [SerializeField] private float maceAttackCost = 20f;
+    [SerializeField] private float axeAttackCost = 24f;
     [SerializeField] private float weaponAttackCost = 20f;
-    [SerializeField] private float unarmedAttackCost = 12f;
     [SerializeField] private WeaponStyle currentWeaponStyle = WeaponStyle.Unarmed;
 
     [Header("Attack Variants")]
@@ -29,7 +32,7 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private bool maceUsesAxeAnimations = true;
 
     [Header("Attack Damage")]
-    [SerializeField] private int[] unarmedAttackDamages = { 8, 10, 14 };
+    [SerializeField] private int[] unarmedAttackDamages = { 6, 8, 10 };
     [SerializeField] private int[] swordAttackBonusDamage = { 0, 2 };
     [SerializeField] private int[] axeAttackBonusDamage = { 0, 4, 8 };
     [SerializeField] private int[] maceAttackBonusDamage = { 0, 3, 7 };
@@ -62,6 +65,7 @@ public class PlayerCombat : MonoBehaviour
 
     private bool isAttacking;
     private WeaponPickup currentWeaponPickup;
+    private float currentWeaponAttackCostOverride;
     private bool suppressDropUntilKeyReleased;
     private bool queuedAttackInput;
     private float queuedAttackExpireTime;
@@ -163,7 +167,7 @@ public class PlayerCombat : MonoBehaviour
         if (playerDodge != null && playerDodge.IsDodging)
             return;
 
-        float staminaCost = IsUnarmed ? unarmedAttackCost : weaponAttackCost;
+        float staminaCost = GetCurrentAttackCost();
 
         if (stamina != null && !stamina.UseStamina(staminaCost))
         {
@@ -191,6 +195,11 @@ public class PlayerCombat : MonoBehaviour
     }
 
     public void EquipWeapon(WeaponStyle newStyle, GameObject newWeaponObject, WeaponPickup sourcePickup)
+    {
+        EquipWeapon(newStyle, newWeaponObject, sourcePickup, 0f);
+    }
+
+    public void EquipWeapon(WeaponStyle newStyle, GameObject newWeaponObject, WeaponPickup sourcePickup, float attackCostOverride)
     {
         if (newWeaponObject == null)
         {
@@ -226,6 +235,7 @@ public class PlayerCombat : MonoBehaviour
         currentWeaponStyle = newStyle;
         currentWeaponObject = newWeaponObject;
         currentWeaponPickup = sourcePickup;
+        currentWeaponAttackCostOverride = Mathf.Max(0f, attackCostOverride);
         suppressDropUntilKeyReleased = Keyboard.current != null && Keyboard.current[dropWeaponKey].isPressed;
         currentWeaponObject.SetActive(true);
 
@@ -254,6 +264,7 @@ public class PlayerCombat : MonoBehaviour
         currentWeaponObject = null;
         weaponHitbox = null;
         currentWeaponPickup = null;
+        currentWeaponAttackCostOverride = 0f;
         currentWeaponStyle = WeaponStyle.Unarmed;
 
         UpdateAnimatorWeaponStyle();
@@ -280,6 +291,7 @@ public class PlayerCombat : MonoBehaviour
         currentWeaponObject = null;
         weaponHitbox = null;
         currentWeaponPickup = null;
+        currentWeaponAttackCostOverride = 0f;
         currentWeaponStyle = WeaponStyle.Unarmed;
 
         UpdateAnimatorWeaponStyle();
@@ -306,6 +318,27 @@ public class PlayerCombat : MonoBehaviour
     {
         if (animator != null)
             animator.SetInteger(weaponStyleHash, (int)GetAnimatorWeaponStyle());
+    }
+
+    private float GetCurrentAttackCost()
+    {
+        if (IsUnarmed)
+            return unarmedAttackCost;
+
+        if (currentWeaponAttackCostOverride > 0f)
+            return currentWeaponAttackCostOverride;
+
+        switch (currentWeaponStyle)
+        {
+            case WeaponStyle.Sword:
+                return swordAttackCost;
+            case WeaponStyle.Mace:
+                return maceAttackCost;
+            case WeaponStyle.Axe:
+                return axeAttackCost;
+            default:
+                return weaponAttackCost;
+        }
     }
 
     private void UpdateAttackIndexAndDamage()

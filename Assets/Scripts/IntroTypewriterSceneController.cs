@@ -12,6 +12,7 @@ public class IntroTypewriterSceneController : MonoBehaviour
     [Header("Typewriter")]
     [SerializeField, Min(0.001f)] private float characterDelay = 0.025f;
     [SerializeField, Min(0f)] private float delayBetweenSequenceTexts = 0.35f;
+    [SerializeField, Min(0f)] private float extraDelayAfterLastText = 0f;
     [SerializeField] private bool startOnEnable = true;
     [SerializeField] private bool clickCompletesCurrentText = true;
 
@@ -80,7 +81,10 @@ public class IntroTypewriterSceneController : MonoBehaviour
                     continue;
 
                 yield return TypeText(text);
-                yield return new WaitForSeconds(delayBetweenSequenceTexts);
+                bool isLastText = IsLastSequenceText(text);
+                float delayAfterText = delayBetweenSequenceTexts + (isLastText ? extraDelayAfterLastText : 0f);
+
+                yield return new WaitForSeconds(delayAfterText);
 
                 text.maxVisibleCharacters = 0;
                 text.gameObject.SetActive(false);
@@ -91,6 +95,22 @@ public class IntroTypewriterSceneController : MonoBehaviour
         introFinished = true;
         yield return new WaitForSeconds(delayBetweenSequenceTexts);
         LoadNextScene();
+    }
+
+    private bool IsLastSequenceText(TMP_Text currentText)
+    {
+        if (textSequence == null)
+            return false;
+
+        for (int i = textSequence.Length - 1; i >= 0; i--)
+        {
+            if (textSequence[i] == null)
+                continue;
+
+            return textSequence[i] == currentText;
+        }
+
+        return false;
     }
 
     private void PrepareSequenceTexts()

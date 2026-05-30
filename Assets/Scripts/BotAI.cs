@@ -1172,6 +1172,11 @@ public class BotAI : MonoBehaviour
             attackComboController.ApplyDamageMultiplier(damageMultiplier);
     }
 
+    public void SetCanTargetOtherBots(bool value)
+    {
+        canTargetOtherBots = value;
+    }
+
     public void SetPlayer(Transform newPlayer)
     {
         player = newPlayer;
