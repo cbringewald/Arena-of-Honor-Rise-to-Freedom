@@ -5177,6 +5177,7 @@ MonoBehaviour:
   - {fileID: 1900867808}
   characterDelay: 0.05
   delayBetweenSequenceTexts: 2
+  extraDelayAfterLastText: 0
   startOnEnable: 1
   clickCompletesCurrentText: 1
   nextSceneName: Arena
@@ -10456,7 +10457,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: 1c56c0b6cad0b0e4085cdedb2d106d66, type: 3}
+  m_Resource: {fileID: 8300000, guid: d9ba5dc747c7642439fb2978c9033701, type: 3}
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1
